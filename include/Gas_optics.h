@@ -214,7 +214,6 @@ class Gas_optics : public Optical_props<TF>
                 Array<TF,6>& fmajor,
                 const Array<TF,2>& col_dry) const;
 
-#ifndef WITH_TENSORRT
         void compute_gas_taus_NN(
                 const int ncol, const int nlay, const int ngpt, const int nband,
                 const Array<TF,2>& play,
@@ -228,7 +227,6 @@ class Gas_optics : public Optical_props<TF>
                 Array<TF,6>& fmajor,
                 const Array<TF,2>& col_dry,
                 TF press_ref_trop_log) const;
-#endif
         void combine_and_reorder(
                 const Array<TF,3>& tau,
                 const Array<TF,3>& tau_rayleigh,

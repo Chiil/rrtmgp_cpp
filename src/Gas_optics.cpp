@@ -11,7 +11,6 @@
 #include <sys/time.h>
 #define restrict __restrict__
 
-#ifdef WITH_TENSORRT
 #include <iostream>
 #include <common.h>
 #include <argsParser.h>
@@ -24,7 +23,7 @@
 #include <fstream>
 #include <sstream>
 static Logger gLogger;
-static const int Ninput = 4;     // number of input columns (water vapour, ozone, pressure, temperature)
+static const int Ninput = 5;     // number of input columns (water vapour, ozone, pressure, temperature)
 static const int Noutput_SW = 224;  // number of output columns (shortwave optical depths)
 //Create cuda engine class:
 ICudaEngine* makecudaengine(std::string eng_name){
@@ -45,8 +44,9 @@ ICudaEngine* makecudaengine(std::string eng_name){
     //Return deserialized engine
     return runtime->deserializeCudaEngine(modelMem,modelSize,NULL);
 }
+
 //Inference function 
-void inference(IExecutionContext& context, float (*input)[Ninput], float (*output)[Noutput_SW], int batchSize){
+void inference(IExecutionContext& context, float* input, float* output, const int & batchSize){
     const ICudaEngine& engine = context.getEngine();
     void* buffers[2];
     int inputIndex = engine.getBindingIndex("TensorRTInputPH_0");
@@ -57,7 +57,7 @@ void inference(IExecutionContext& context, float (*input)[Ninput], float (*outpu
     cudaStreamCreate(&stream);
     cudaMemcpyAsync(buffers[inputIndex], input, batchSize * Ninput * sizeof(float), cudaMemcpyHostToDevice, stream);
     context.enqueue(batchSize, buffers, stream, nullptr);
-    cudaMemcpyAsync(output, buffers[outputIndex], batchSize * Noutput_SW * sizeof(float), cudaMemcpyDeviceToHost, stream);
+    cudaMemcpyAsync(output, buffers[outputIndex], batchSize  * Noutput_SW * sizeof(float), cudaMemcpyDeviceToHost, stream);
 }
 
 //create engines and execution context
@@ -76,7 +76,6 @@ IExecutionContext* context_lower_ssa = engine_lower_ssa->createExecutionContext(
 std::string eng_name4("TRTEngineOp_0_ssa.plan");
 ICudaEngine* engine_upper_ssa = makecudaengine(eng_name4);
 IExecutionContext* context_upper_ssa = engine_upper_ssa->createExecutionContext();
-#endif
 #define restrict __restrict__
 
 namespace
@@ -1237,8 +1236,9 @@ void Gas_optics<TF>::compute_gas_taus(
     }
 
     combine_and_reorder(tau, tau_rayleigh, has_rayleigh, optical_props);
+    Array<TF,3>& taux = optical_props->get_tau();
 }
-
+    
 template<typename TF>
 void Gas_optics<TF>::combine_and_reorder(
         const Array<TF,3>& tau,
@@ -1322,7 +1322,6 @@ void Gas_optics<TF>::source(
     // reorder123x321_test(sources.get_lev_source_dec().ptr(), lev_source_dec_t.ptr(), ngpt, nlay, ncol);
 }
 
-#ifdef WITH_TENSORRT
 //Neural Network optical property function
 //Currently only implemented for atmospheric profilfes ordered bottom-first
 template<typename TF>
@@ -1356,64 +1355,94 @@ void Gas_optics<TF>::compute_gas_taus_NN(
     }
     //get gas concentrations
     const Array<TF,2>& h2o = gas_desc.get_vmr(this->gas_names({1}));
+    const Array<TF,2>& co2 = gas_desc.get_vmr(this->gas_names({2}));
     const Array<TF,2>& o3  = gas_desc.get_vmr(this->gas_names({3}));
     //// Lower atmosphere: 
     //fill input array
-    float input_lower[idx_tropo][Ninput]; 
-    float output_lower[idx_tropo][ngpt];
-    float output_lower2[idx_tropo][ngpt];
+    float input_lower[idx_tropo*Ninput]; 
+    float output_lower_tau[idx_tropo*ngpt];
+    float output_lower_ssa[idx_tropo*ngpt];
     for (int i = 0; i < idx_tropo; i++){
-        input_lower[i][0] = log(h2o({1,i+1}));
-        input_lower[i][1] = log(o3({1,i+1}));
-        input_lower[i][2] = log(play({1,i+1}));
-        input_lower[i][3] = tlay({1,i+1});   
+        input_lower[i*5+0] = log(h2o({1,i+1}));
+        input_lower[i*5+1] = co2({1,1});
+        input_lower[i*5+2] = log(o3({1,i+1}));
+        input_lower[i*5+3] = log(play({1,i+1}));
+        input_lower[i*5+4] = tlay({1,i+1});   
     }
-    float dp[ncol][nlay];
+//std::cout<<input_lower[0][0]<<std::endl;
+//std::cout<<input_lower[0][1]<<std::endl;
+//std::cout<<input_lower[0][2]<<std::endl;
+//std::cout<<input_lower[0][3]<<std::endl;
+//std::cout<<input_lower[0][4]<<std::endl;
+//std::cout <<"++++++++"<<std::endl;
+//std::cout<<input_lower[1][0]<<std::endl;
+//std::cout<<input_lower[1][1]<<std::endl;
+//std::cout<<input_lower[1][2]<<std::endl;
+//std::cout<<input_lower[1][3]<<std::endl;
+//std::cout<<input_lower[1][4]<<std::endl;
+//
+
+     float dp[ncol][nlay];
      for (int ilay=1; ilay<=nlay; ++ilay){
         for (int icol=1; icol<=ncol; ++icol){
            dp[icol-1][ilay-1] = abs(plev({icol,ilay})-plev({icol,ilay+1}));
- 
-
-     }}
+    }}
+    std::cout <<"++++++++++++++++++++++++++++++"<<std::endl;
     //do inference Optical Depth 
     inference(*context_lower_tau, input_lower, output_lower_tau, idx_tropo);   
     inference(*context_lower_ssa, input_lower, output_lower_ssa, idx_tropo);
+    std::cout <<"++++++++++++++++++++++++++++++"<<std::endl;
+
     int idxlay;
-    for (int igpt=1; igpt<=ngpt; ++igpt){
-        for (int ilay=1; ilay<=idx_tropo; ++ilay){
-    	    for (int icol=1; icol<=ncol; ++icol){
-                 idxlay = (icol-1)+(ilay-1)*ncol;
-                 tau({icol, ilay, igpt}) = output_lower_tau[idxlay][igpt-1] * dp[icol-1][ilay-1];
-                 ssa({icol, ilay, igpt}) = std::min(std::max(output_lower_ssa[idxlay][igpt-1],nul),een);
+    for (int icol=1; icol<=ncol; ++icol){
+         for (int ilay=1; ilay<=idx_tropo; ++ilay){
+            for (int igpt=1; igpt<=ngpt; ++igpt){
+           idxlay = (igpt-1)+(ilay-1)*ngpt+(icol-1)*idx_tropo*ngpt;
+      //    std::cout<<igpt<<" "<<icol<<" "<<ilay<<" "<<idxlay<<std::endl;
+
+          tau({icol, ilay, igpt}) = output_lower_tau[idxlay] * dp[icol-1][ilay-1];
+          ssa({icol, ilay, igpt}) = std::min(std::max(output_lower_ssa[idxlay],nul),een);
+
             }
         }
     }
+    std::cout <<"++++++++++++++++++++++++++++++"<<std::endl;
+
     //// Upper atmosphere:
     //fill input array
-    float input_upper[batchSize - idx_tropo][Ninput];
-    float output_upper[batchSize - idx_tropo][ngpt];
-    float output_upper2[batchSize - idx_tropo][ngpt];
+    float input_upper[(batchSize - idx_tropo)*Ninput];
+    float output_upper_tau[(batchSize - idx_tropo)*ngpt];
+    float output_upper_ssa[(batchSize - idx_tropo)*ngpt];
     for (int i = idx_tropo; i < batchSize; i++){
-        input_upper[i-idx_tropo][0] = log(h2o({1,i+1}));
-        input_upper[i-idx_tropo][1] = log(o3({1,i+1}));
-        input_upper[i-idx_tropo][2] = log(play({1,i+1}));
-        input_upper[i-idx_tropo][3] = tlay({1,i+1});
+        input_upper[5*(i-idx_tropo)+0] = log(h2o({1,i+1}));
+        input_upper[5*(i-idx_tropo)+1] = co2({1,1});
+        input_upper[5*(i-idx_tropo)+2] = log(o3({1,i+1}));
+        input_upper[5*(i-idx_tropo)+3] = log(play({1,i+1}));
+        input_upper[5*(i-idx_tropo)+4] = tlay({1,i+1});
     }
     //do inference Optical Depth
+    std::cout <<"++++++++++++++++++++++++++++++"<<std::endl;
+
     inference(*context_upper_tau, input_upper, output_upper_tau,batchSize -  idx_tropo);
     inference(*context_upper_ssa, input_upper, output_upper_ssa,batchSize -  idx_tropo);
+    std::cout <<"++++++++++++++++++++++++++++++"<<std::endl;
+    for (int icol=1; icol<=ncol; ++icol){
+    for (int ilay=idx_tropo+1; ilay<=batchSize; ++ilay){
     for (int igpt=1; igpt<=ngpt; ++igpt){
-        for (int ilay=idx_tropo+1; ilay<batchSize; ++ilay){
-           for (int icol=1; icol<=ncol; ++icol){
-                idxlay = (icol-1)+(ilay-1-idx_tropo)*ncol;
-                tau({icol, ilay, igpt}) = output_upper_tau[idxlay][igpt-1] * dp[icol-1][ilay-1];
-                ssa({icol, ilay, igpt}) =  std::min(std::max(output_upper_ssa[idxlay][igpt-1],nul),een);
+          idxlay = (igpt-1)+(ilay-1-idx_tropo)*ngpt+(icol-1)*(batchSize-idx_tropo)*ngpt;
+        std::cout<<"x "<<tau({icol, ilay, igpt})<<std::endl;
+
+//        std::cout<<igpt<<" "<<icol<<" "<<ilay<<" "<<idxlay<<std::endl;
+           tau({icol, ilay, igpt}) = output_upper_tau[idxlay] * dp[icol-1][ilay-1];
+           ssa({icol, ilay, igpt}) = std::min(std::max(output_upper_ssa[idxlay],nul),een);
+        std::cout<<"y "<<tau({icol, ilay, igpt})<<std::endl;
+
             }
         }
     }
 
+    std::cout<<batchSize<<std::endl;
 }
-#endif
 
 #ifdef FLOAT_SINGLE
 template class Gas_optics<float>;
