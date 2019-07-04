@@ -608,13 +608,13 @@ void Gas_optics<TF>::init_abs_coeffs(
 {
     // Which gases known to the gas optics are present in the host model (available_gases)?
     std::vector<std::string> gas_names_to_use;
-
     for (const std::string &s : gas_names.v())
     {
         if (available_gases.exists(s))
             gas_names_to_use.push_back(s);
     }
-
+    testing  = 500;
+    this->testing = 500;
     // Now the number of gases is the union of those known to the k-distribution and provided
     // by the host model.
     const int n_gas = gas_names_to_use.size();
