@@ -45,9 +45,13 @@ if(USECUDA)
   cuda_add_executable(test_rcemip test_rcemip.cpp)
   target_link_libraries(test_rcemip rrtmgp ${LIBS} m)
 else()
-  add_executable(test_rrtmgp test_rrtmgp.cpp)
-  target_link_libraries(test_rrtmgp rrtmgp ${LIBS} m)
+#  add_executable(test_rrtmgp test_rrtmgp.cpp)
+#  target_link_libraries(test_rrtmgp rrtmgp ${LIBS} m)
 
   add_executable(test_rcemip test_rcemip.cpp)
   target_link_libraries(test_rcemip rrtmgp ${LIBS} m)
+
+  add_executable(test_rcemipNN test_rcemipNN.cpp)
+  target_link_libraries(test_rcemipNN rrtmgp ${LIBS} m)
+
 endif()

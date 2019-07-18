@@ -1236,7 +1236,6 @@ void Gas_optics<TF>::compute_gas_taus(
     }
 
     combine_and_reorder(tau, tau_rayleigh, has_rayleigh, optical_props);
-    Array<TF,3>& taux = optical_props->get_tau();
 }
     
 template<typename TF>
