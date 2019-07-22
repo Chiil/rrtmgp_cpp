@@ -1,3 +1,27 @@
+/*
+ * This file is part of a C++ interface to the Radiative Transfer for Energetics (RTE)
+ * and Rapid Radiative Transfer Model for GCM applications Parallel (RRTMGP).
+ *
+ * The original code is found at https://github.com/RobertPincus/rte-rrtmgp.
+ *
+ * Contacts: Robert Pincus and Eli Mlawer
+ * email: rrtmgp@aer.com
+ *
+ * Copyright 2015-2019,  Atmospheric and Environmental Research and
+ * Regents of the University of Colorado.  All right reserved.
+ *
+ * This C++ interface can be downloaded from https://github.com/microhh/rrtmgp_cpp
+ *
+ * Contact: Chiel van Heerwaarden
+ * email: chiel.vanheerwaarden@wur.nl
+ *
+ * Copyright 2019, Wageningen University & Research.
+ *
+ * Use and duplication is permitted under the terms of the
+ * BSD 3-clause license, see http://opensource.org/licenses/BSD-3-Clause
+ *
+ */
+
 #ifndef ARRAY_H
 #define ARRAY_H
 
@@ -59,27 +83,6 @@ inline int product(const std::array<int, N>& array)
     return product;
 }
 
-/*
-template<typename T>
-class Array_iterator
-{
-    public:
-        Array_iterator(const std::vector<T>& data, const int n) : data(data), n(n) {}
-        Array_iterator& operator++()
-        {
-            ++n;
-            return *this;
-        }
-        std::pair<int, T> operator*() const { return std::make_pair(n, data[n]); }
-
-    private:
-        const std::vector<T>& data;
-        int n;
-
-    friend bool operator!=(const Array_iterator<T>& left, const Array_iterator<T>& right) { return left.n != right.n; }
-};
-*/
-
 template<typename T, int N>
 class Array
 {
@@ -114,16 +117,16 @@ class Array
         {} // CvH Do we need to size check data?
 
         // Define the default copy constructor and assignment operator.
-        Array(const Array<T, N>&) = default;
-        Array<T,N>& operator=(const Array<T, N>&) = default; // CvH does this one need empty checking?
+        // Array(const Array<T, N>&) = default;
+        // Array<T,N>& operator=(const Array<T, N>&) = default; // CvH does this one need empty checking?
 
-        Array(Array<T, N>&& array) :
-            dims(std::exchange(array.dims, {})),
-            ncells(std::exchange(array.ncells, 0)),
-            data(std::move(array.data)),
-            strides(std::exchange(array.strides, {})),
-            offsets(std::exchange(array.offsets, {}))
-        {}
+        // Array(Array<T, N>&& array) :
+        //     dims(std::exchange(array.dims, {})),
+        //     ncells(std::exchange(array.ncells, 0)),
+        //     data(std::move(array.data)),
+        //     strides(std::exchange(array.strides, {})),
+        //     offsets(std::exchange(array.offsets, {}))
+        // {}
 
         inline void set_offsets(const std::array<int, N>& offsets)
         {
@@ -161,6 +164,11 @@ class Array
             return *std::max_element(data.begin(), data.end());
         }
 
+        inline T min() const
+        {
+            return *std::min_element(data.begin(), data.end());
+        }
+
         inline void operator=(std::vector<T>&& data)
         {
             // CvH check size.
@@ -179,9 +187,6 @@ class Array
             return data[index];
         }
 
-        // inline Array_iterator<T> begin() { return Array_iterator<T>(data, 0); }
-        // inline Array_iterator<T> end()   { return Array_iterator<T>(data, ncells); }
-
         inline int dim(const int i) const { return dims[i-1]; }
         inline bool is_empty() const { return ncells == 0; }
 
@@ -195,8 +200,8 @@ class Array
             for (int i=0; i<N; ++i)
             {
                 subdims[i] = ranges[i].second - ranges[i].first + 1;
-                // CvH how flexible / tolerant are we? This could go wrong...
-                do_spread[i] = (dims[i] == 1 && subdims[i] > 1) ? true : false;
+                // CvH how flexible / tolerant are we?
+                do_spread[i] = (dims[i] == 1);
             }
 
             // Create the array and fill it with the subset.
@@ -207,13 +212,9 @@ class Array
                 int ic = i;
                 for (int n=N-1; n>0; --n)
                 {
-                    // CvH: I substituded this to enable spreading along dimension of 1.
-                    // index[n] = ic / a_sub.strides[n] + ranges[n].first;
                     index[n] = do_spread[n] ? 1 : ic / a_sub.strides[n] + ranges[n].first;
                     ic %= a_sub.strides[n];
                 }
-                // CvH: I substituded this to enable spreading along dimension of 1.
-                // index[0] = ic + ranges[0].first;
                 index[0] = do_spread[0] ? 1 : ic + ranges[0].first;
                 a_sub.data[i] = (*this)(index);
             }

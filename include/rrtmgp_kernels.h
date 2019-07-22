@@ -1,7 +1,31 @@
+/*
+ * This file is part of a C++ interface to the Radiative Transfer for Energetics (RTE)
+ * and Rapid Radiative Transfer Model for GCM applications Parallel (RRTMGP).
+ *
+ * The original code is found at https://github.com/RobertPincus/rte-rrtmgp.
+ *
+ * Contacts: Robert Pincus and Eli Mlawer
+ * email: rrtmgp@aer.com
+ *
+ * Copyright 2015-2019,  Atmospheric and Environmental Research and
+ * Regents of the University of Colorado.  All right reserved.
+ *
+ * This C++ interface can be downloaded from https://github.com/microhh/rrtmgp_cpp
+ *
+ * Contact: Chiel van Heerwaarden
+ * email: chiel.vanheerwaarden@wur.nl
+ *
+ * Copyright 2019, Wageningen University & Research.
+ *
+ * Use and duplication is permitted under the terms of the
+ * BSD 3-clause license, see http://opensource.org/licenses/BSD-3-Clause
+ *
+ */
+
 #ifndef RRTMGP_KERNELS_H
 #define RRTMGP_KERNELS_H
 
-#ifdef FLOAT_SINGLE
+#ifdef FLOAT_SINGLE_RRTMGP
 #define FLOAT_TYPE float
 #else
 #define FLOAT_TYPE double
@@ -144,5 +168,16 @@ namespace rrtmgp_kernels
             FLOAT_TYPE* mu0,
             FLOAT_TYPE* sfc_alb_dir_gpt, FLOAT_TYPE* sfc_alb_dif_gpt,
             FLOAT_TYPE* gpt_flux_up, FLOAT_TYPE* gpt_flux_dn, FLOAT_TYPE* gpt_flux_dir);
+
+    extern "C" void inc_2stream_by_2stream_bybnd(
+            int* ncol, int* nlev, int* ngpt,
+            FLOAT_TYPE* tau_inout, FLOAT_TYPE* ssa_inout, FLOAT_TYPE* g_inout,
+            FLOAT_TYPE* tau_in, FLOAT_TYPE* ssa_in, FLOAT_TYPE* g_in,
+            int* nbnd, int* band_lims_gpoint);
+
+    extern "C" void inc_1scalar_by_1scalar_bybnd(
+            int* ncol, int* nlev, int* ngpt,
+            FLOAT_TYPE* tau_inout, FLOAT_TYPE* tau_in,
+            int* nbnd, int* band_lims_gpoint);
 }
 #endif

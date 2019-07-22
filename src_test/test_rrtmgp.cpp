@@ -1,3 +1,27 @@
+/*
+ * This file is part of a C++ interface to the Radiative Transfer for Energetics (RTE)
+ * and Rapid Radiative Transfer Model for GCM applications Parallel (RRTMGP).
+ *
+ * The original code is found at https://github.com/RobertPincus/rte-rrtmgp.
+ *
+ * Contacts: Robert Pincus and Eli Mlawer
+ * email: rrtmgp@aer.com
+ *
+ * Copyright 2015-2019,  Atmospheric and Environmental Research and
+ * Regents of the University of Colorado.  All right reserved.
+ *
+ * This C++ interface can be downloaded from https://github.com/microhh/rrtmgp_cpp
+ *
+ * Contact: Chiel van Heerwaarden
+ * email: chiel.vanheerwaarden@wur.nl
+ *
+ * Copyright 2019, Wageningen University & Research.
+ *
+ * Use and duplication is permitted under the terms of the
+ * BSD 3-clause license, see http://opensource.org/licenses/BSD-3-Clause
+ *
+ */
+
 #include <boost/algorithm/string.hpp>
 #include <cmath>
 
@@ -11,7 +35,7 @@
 #include "Rte_lw.h"
 #include "Rte_sw.h"
 
-#ifdef FLOAT_SINGLE
+#ifdef FLOAT_SINGLE_RRTMGP
 #define FLOAT_TYPE float
 #else
 #define FLOAT_TYPE double
@@ -430,7 +454,7 @@ void solve_radiation(Master& master)
                     top_at_1,
                     sources_subset_in,
                     emis_sfc_subset_in,
-                    Array<double,2>(), // Add an empty array, no inc_flux.
+                    Array<TF,2>(), // Add an empty array, no inc_flux.
                     gpt_flux_up,
                     gpt_flux_dn,
                     n_ang);
@@ -675,7 +699,7 @@ void solve_radiation(Master& master)
                     toa_src_subset_in,
                     sfc_alb_dir_subset_in,
                     sfc_alb_dif_subset_in,
-                    Array<double,2>(), // Add an empty array, no inc_flux.
+                    Array<TF,2>(), // Add an empty array, no inc_flux.
                     gpt_flux_up,
                     gpt_flux_dn,
                     gpt_flux_dn_dir);

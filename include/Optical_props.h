@@ -1,3 +1,27 @@
+/*
+ * This file is part of a C++ interface to the Radiative Transfer for Energetics (RTE)
+ * and Rapid Radiative Transfer Model for GCM applications Parallel (RRTMGP).
+ *
+ * The original code is found at https://github.com/RobertPincus/rte-rrtmgp.
+ *
+ * Contacts: Robert Pincus and Eli Mlawer
+ * email: rrtmgp@aer.com
+ *
+ * Copyright 2015-2019,  Atmospheric and Environmental Research and
+ * Regents of the University of Colorado.  All right reserved.
+ *
+ * This C++ interface can be downloaded from https://github.com/microhh/rrtmgp_cpp
+ *
+ * Contact: Chiel van Heerwaarden
+ * email: chiel.vanheerwaarden@wur.nl
+ *
+ * Copyright 2019, Wageningen University & Research.
+ *
+ * Use and duplication is permitted under the terms of the
+ * BSD 3-clause license, see http://opensource.org/licenses/BSD-3-Clause
+ *
+ */
+
 #ifndef OPTICAL_PROPS_H
 #define OPTICAL_PROPS_H
 
@@ -11,6 +35,9 @@ class Optical_props
         Optical_props(
                 const Array<TF,2>& band_lims_wvn,
                 const Array<int,2>& band_lims_gpt);
+
+        Optical_props(
+                const Array<TF,2>& band_lims_wvn);
 
         virtual ~Optical_props() {};
 
@@ -42,6 +69,10 @@ class Optical_props_arry : public Optical_props<TF>
         virtual Array<TF,3>& get_tau() = 0;
         virtual Array<TF,3>& get_ssa() = 0;
         virtual Array<TF,3>& get_g  () = 0;
+
+        virtual const Array<TF,3>& get_tau() const = 0;
+        virtual const Array<TF,3>& get_ssa() const = 0;
+        virtual const Array<TF,3>& get_g  () const = 0;
 
         virtual void set_subset(
                 const std::unique_ptr<Optical_props_arry<TF>>& optical_props_sub,
@@ -80,6 +111,10 @@ class Optical_props_1scl : public Optical_props_arry<TF>
         Array<TF,3>& get_ssa() { throw std::runtime_error("ssa is not available in this class"); }
         Array<TF,3>& get_g  () { throw std::runtime_error("g is available in this class"); }
 
+        const Array<TF,3>& get_tau() const { return tau; }
+        const Array<TF,3>& get_ssa() const { throw std::runtime_error("ssa is not available in this class"); }
+        const Array<TF,3>& get_g  () const { throw std::runtime_error("g is available in this class"); }
+
     private:
         Array<TF,3> tau;
 };
@@ -108,9 +143,16 @@ class Optical_props_2str : public Optical_props_arry<TF>
         Array<TF,3>& get_ssa() { return ssa; }
         Array<TF,3>& get_g  () { return g; }
 
+        const Array<TF,3>& get_tau() const { return tau; }
+        const Array<TF,3>& get_ssa() const { return ssa; }
+        const Array<TF,3>& get_g  () const { return g; }
+
     private:
         Array<TF,3> tau;
         Array<TF,3> ssa;
         Array<TF,3> g;
 };
+
+template<typename TF> void add_to(Optical_props_1scl<TF>& op_inout, const Optical_props_1scl<TF>& op_in);
+template<typename TF> void add_to(Optical_props_2str<TF>& op_inout, const Optical_props_2str<TF>& op_in);
 #endif
