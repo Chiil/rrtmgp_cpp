@@ -40,7 +40,7 @@ if(WITH_TENSORRT)
     if(NOT DEFINED ENV{TensorRT_PATH})
     message(STATUS "Congratulations, you made the correct decision to use our Neural Network solver")
     message(STATUS "Please set environment variable TensorRT_PATH to the location where TensorRT is installed")
-    message(STATUS "e.g. export TensorRT=\"home/<user>/TensorRT-5.0.2.6\"")
+    message(STATUS "e.g. export TensorRT_PATH=\"/home/<user>/TensorRT-5.0.2.6\"")
     endif(NOT DEFINED ENV{TensorRT_PATH})
 
     include_directories("$ENV{TensorRT_PATH}/samples/common")
