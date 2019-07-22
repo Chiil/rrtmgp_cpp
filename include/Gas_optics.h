@@ -2,6 +2,7 @@
 #define GAS_OPTICS_H
 
 #include <string>
+
 #include "Array.h"
 
 // Forward declarations.
@@ -126,9 +127,10 @@ class Gas_optics : public Optical_props<TF>
         TF temp_ref_min, temp_ref_max;
         TF press_ref_min, press_ref_max;
         TF press_ref_trop_log;
+
         TF press_ref_log_delta;
         TF temp_ref_delta;
-        TF testing;
+
         Array<TF,1> press_ref, press_ref_log, temp_ref;
 
         Array<std::string,1> gas_names;
@@ -213,19 +215,6 @@ class Gas_optics : public Optical_props<TF>
                 Array<TF,6>& fmajor,
                 const Array<TF,2>& col_dry) const;
 
-        void compute_gas_taus_NN(
-                const int ncol, const int nlay, const int ngpt, const int nband,
-                const Array<TF,2>& play,
-                const Array<TF,2>& plev,
-                const Array<TF,2>& tlay,
-                const Gas_concs<TF>& gas_desc,
-                std::unique_ptr<Optical_props_arry<TF>>& optical_props,
-                Array<int,2>& jtemp, Array<int,2>& jpress,
-                Array<int,4>& jeta,
-                Array<int,2>& tropo,
-                Array<TF,6>& fmajor,
-                const Array<TF,2>& col_dry,
-                TF press_ref_trop_log) const;
         void combine_and_reorder(
                 const Array<TF,3>& tau,
                 const Array<TF,3>& tau_rayleigh,
@@ -241,7 +230,5 @@ class Gas_optics : public Optical_props<TF>
                 const Array<TF,6>& fmajor,
                 Source_func_lw<TF>& sources,
                 const Array<TF,2>& tlev) const;
-
-       
 };
 #endif

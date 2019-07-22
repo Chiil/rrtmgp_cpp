@@ -1,95 +1,21 @@
 #include <cmath>
 #include <numeric>
 #include <boost/algorithm/string.hpp>
+// #include <xtensor/xarray.hpp>
+// #include <xtensor/xadapt.hpp>
+// #include "xtensor/xnoalias.hpp"
+
 #include "Gas_concs.h"
 #include "Gas_optics.h"
 #include "Array.h"
 #include "Optical_props.h"
 #include "Source_functions.h"
+
 #include "rrtmgp_kernels.h"
-#include <time.h>
-#include <sys/time.h>
-#define restrict __restrict__
-
-#include <iostream>
-#include <common.h>
-#include <argsParser.h>
-#include <buffers.h>
-#include <NvInfer.h>
-#include <cuda_runtime_api.h>
-#include <algorithm>
-#include <cassert>
-#include <cmath>
-#include <fstream>
-#include <sstream>
-static Logger gLogger;
-static const int Ninput = 5;     // number of input columns (water vapour, ozone, pressure, temperature)
-static const int Noutput_SW = 224;  // number of output columns (shortwave optical depths)
-//Create cuda engine class:
-ICudaEngine* makecudaengine(std::string eng_name){
-    //Read Engine from file
-    std::stringstream ModelStream;
-    ModelStream.seekg(0, ModelStream.beg);
-    std::ifstream cache(eng_name);
-    ModelStream << cache.rdbuf();
-    cache.close();
-    //Obtain size and memory usage of engine
-    ModelStream.seekg(0, std::ios::end);
-    const int modelSize = ModelStream.tellg();
-    ModelStream.seekg(0, std::ios::beg);
-    void* modelMem = malloc(modelSize);
-    ModelStream.read((char*)modelMem, modelSize);
-    //Deserialize engine
-    IRuntime* runtime = createInferRuntime(gLogger);
-    //Return deserialized engine
-    return runtime->deserializeCudaEngine(modelMem,modelSize,NULL);
-}
-
-//Inference function 
-void inference(IExecutionContext& context, float* input, float* output, const int & batchSize){
-    const ICudaEngine& engine = context.getEngine();
-    void* buffers[2];
-    int inputIndex = engine.getBindingIndex("TensorRTInputPH_0");
-    int outputIndex = engine.getBindingIndex("TensorRTOutputPH_0");
-    cudaMalloc(&buffers[inputIndex], batchSize * Ninput * sizeof(float));   // data
-    cudaMalloc(&buffers[outputIndex], batchSize * Noutput_SW * sizeof(float));   // data
-    cudaStream_t stream;
-    cudaStreamCreate(&stream);
-    cudaMemcpyAsync(buffers[inputIndex], input, batchSize * Ninput * sizeof(float), cudaMemcpyHostToDevice, stream);
-    context.enqueue(batchSize, buffers, stream, nullptr);
-    cudaMemcpyAsync(output, buffers[outputIndex], batchSize  * Noutput_SW * sizeof(float), cudaMemcpyDeviceToHost, stream);
-}
-
-//create engines and execution context
-std::string eng_name1("TRTEngineOp_1_tau.plan");
-ICudaEngine* engine_lower_tau = makecudaengine(eng_name1);
-IExecutionContext* context_lower_tau = engine_lower_tau->createExecutionContext();
-
-std::string eng_name2("TRTEngineOp_0_tau.plan");
-ICudaEngine* engine_upper_tau = makecudaengine(eng_name2);
-IExecutionContext* context_upper_tau = engine_upper_tau->createExecutionContext();
-
-std::string eng_name3("TRTEngineOp_1_ssa.plan");
-ICudaEngine* engine_lower_ssa = makecudaengine(eng_name3);
-IExecutionContext* context_lower_ssa = engine_lower_ssa->createExecutionContext();
-
-std::string eng_name4("TRTEngineOp_0_ssa.plan");
-ICudaEngine* engine_upper_ssa = makecudaengine(eng_name4);
-IExecutionContext* context_upper_ssa = engine_upper_ssa->createExecutionContext();
 #define restrict __restrict__
 
 namespace
 {
-    double starttime,endtime;
-    double get_wall_time(){
-        struct timeval time;
-        if (gettimeofday(&time,NULL)){
-            //  Handle error
-            return 0;
-            }
-        return (double)time.tv_sec + (double)time.tv_usec * .000001;
-    }
-
     int find_index(
             const Array<std::string,1>& data, const std::string& value)
     {
@@ -608,13 +534,13 @@ void Gas_optics<TF>::init_abs_coeffs(
 {
     // Which gases known to the gas optics are present in the host model (available_gases)?
     std::vector<std::string> gas_names_to_use;
+
     for (const std::string &s : gas_names.v())
     {
         if (available_gases.exists(s))
             gas_names_to_use.push_back(s);
     }
-    testing  = 500;
-    this->testing = 500;
+
     // Now the number of gases is the union of those known to the k-distribution and provided
     // by the host model.
     const int n_gas = gas_names_to_use.size();
@@ -863,22 +789,13 @@ void Gas_optics<TF>::gas_optics(
     Array<TF,6> fmajor({2, 2, 2, this->get_nflav(), play.dim(1), play.dim(2)});
     Array<int,4> jeta({2, this->get_nflav(), play.dim(1), play.dim(2)});
 
-starttime=get_wall_time();
     // Gas optics.
- compute_gas_taus(
+    compute_gas_taus(
             ncol, nlay, ngpt, nband,
             play, plev, tlay, gas_desc,
             optical_props,
             jtemp, jpress, jeta, tropo, fmajor,
             col_dry);
-//  compute_gas_taus_NN(
-//          ncol, nlay, ngpt, nband,
-//          play, plev, tlay, gas_desc,
-//          optical_props,
-//          jtemp, jpress, jeta, tropo, fmajor,
-//          col_dry,press_ref_trop_log);
-endtime=get_wall_time();
-std::cout << "elapsed time in compute_gas_taus: " <<endtime-starttime << std::endl;
 
     // External source function is constant.
     for (int igpt=1; igpt<=ngpt; ++igpt)
@@ -1120,6 +1037,7 @@ void Gas_optics<TF>::compute_gas_taus(
     for (int igas=1; igas<=ngas; ++igas)
     {
         const Array<TF,2>& vmr_2d = gas_desc.get_vmr(this->gas_names({igas}));
+
         // Fill array with constant value.
         if (vmr_2d.dim(1) == 1 && vmr_2d.dim(2) == 1)
         {
@@ -1237,7 +1155,7 @@ void Gas_optics<TF>::compute_gas_taus(
 
     combine_and_reorder(tau, tau_rayleigh, has_rayleigh, optical_props);
 }
-    
+
 template<typename TF>
 void Gas_optics<TF>::combine_and_reorder(
         const Array<TF,3>& tau,
@@ -1319,128 +1237,6 @@ void Gas_optics<TF>::source(
     // reorder123x321_test(sources.get_lay_source    ().ptr(), lay_source_t    .ptr(), ngpt, nlay, ncol);
     // reorder123x321_test(sources.get_lev_source_inc().ptr(), lev_source_inc_t.ptr(), ngpt, nlay, ncol);
     // reorder123x321_test(sources.get_lev_source_dec().ptr(), lev_source_dec_t.ptr(), ngpt, nlay, ncol);
-}
-
-//Neural Network optical property function
-//Currently only implemented for atmospheric profilfes ordered bottom-first
-template<typename TF>
-void Gas_optics<TF>::compute_gas_taus_NN(
-        const int ncol, const int nlay, const int ngpt, const int nband,
-        const Array<TF,2>& play,
-        const Array<TF,2>& plev,
-        const Array<TF,2>& tlay,
-        const Gas_concs<TF>& gas_desc,
-        std::unique_ptr<Optical_props_arry<TF>>& optical_props,
-        Array<int,2>& jtemp, Array<int,2>& jpress,
-        Array<int,4>& jeta,
-        Array<int,2>& tropo,
-        Array<TF,6>& fmajor,
-        const Array<TF,2>& col_dry,
-        TF press_ref_trop_log) const
-{
-    Array<TF,3>& tau = optical_props->get_tau();
-    Array<TF,3>& ssa = optical_props->get_ssa();
- 
-    const int batchSize=ncol*nlay;
-    const float press_ref_trop = exp(press_ref_trop_log);
-    int idx_tropo = 0;
-    float nul = 0.;
-    float een = 1.;
-    //find index that defines border between upper and lower atmosphere
-    for (int i = 1; i <= nlay; i++){   
-       if (play({1,i}) > press_ref_trop){
-           idx_tropo += 1;
-       }
-    }
-    //get gas concentrations
-    const Array<TF,2>& h2o = gas_desc.get_vmr(this->gas_names({1}));
-    const Array<TF,2>& co2 = gas_desc.get_vmr(this->gas_names({2}));
-    const Array<TF,2>& o3  = gas_desc.get_vmr(this->gas_names({3}));
-    //// Lower atmosphere: 
-    //fill input array
-    float input_lower[idx_tropo*Ninput]; 
-    float output_lower_tau[idx_tropo*ngpt];
-    float output_lower_ssa[idx_tropo*ngpt];
-    for (int i = 0; i < idx_tropo; i++){
-        input_lower[i*5+0] = log(h2o({1,i+1}));
-        input_lower[i*5+1] = co2({1,1});
-        input_lower[i*5+2] = log(o3({1,i+1}));
-        input_lower[i*5+3] = log(play({1,i+1}));
-        input_lower[i*5+4] = tlay({1,i+1});   
-    }
-//std::cout<<input_lower[0][0]<<std::endl;
-//std::cout<<input_lower[0][1]<<std::endl;
-//std::cout<<input_lower[0][2]<<std::endl;
-//std::cout<<input_lower[0][3]<<std::endl;
-//std::cout<<input_lower[0][4]<<std::endl;
-//std::cout <<"++++++++"<<std::endl;
-//std::cout<<input_lower[1][0]<<std::endl;
-//std::cout<<input_lower[1][1]<<std::endl;
-//std::cout<<input_lower[1][2]<<std::endl;
-//std::cout<<input_lower[1][3]<<std::endl;
-//std::cout<<input_lower[1][4]<<std::endl;
-//
-
-     float dp[ncol][nlay];
-     for (int ilay=1; ilay<=nlay; ++ilay){
-        for (int icol=1; icol<=ncol; ++icol){
-           dp[icol-1][ilay-1] = abs(plev({icol,ilay})-plev({icol,ilay+1}));
-    }}
-    std::cout <<"++++++++++++++++++++++++++++++"<<std::endl;
-    //do inference Optical Depth 
-    inference(*context_lower_tau, input_lower, output_lower_tau, idx_tropo);   
-    inference(*context_lower_ssa, input_lower, output_lower_ssa, idx_tropo);
-    std::cout <<"++++++++++++++++++++++++++++++"<<std::endl;
-
-    int idxlay;
-    for (int icol=1; icol<=ncol; ++icol){
-         for (int ilay=1; ilay<=idx_tropo; ++ilay){
-            for (int igpt=1; igpt<=ngpt; ++igpt){
-           idxlay = (igpt-1)+(ilay-1)*ngpt+(icol-1)*idx_tropo*ngpt;
-      //    std::cout<<igpt<<" "<<icol<<" "<<ilay<<" "<<idxlay<<std::endl;
-
-          tau({icol, ilay, igpt}) = output_lower_tau[idxlay] * dp[icol-1][ilay-1];
-          ssa({icol, ilay, igpt}) = std::min(std::max(output_lower_ssa[idxlay],nul),een);
-
-            }
-        }
-    }
-    std::cout <<"++++++++++++++++++++++++++++++"<<std::endl;
-
-    //// Upper atmosphere:
-    //fill input array
-    float input_upper[(batchSize - idx_tropo)*Ninput];
-    float output_upper_tau[(batchSize - idx_tropo)*ngpt];
-    float output_upper_ssa[(batchSize - idx_tropo)*ngpt];
-    for (int i = idx_tropo; i < batchSize; i++){
-        input_upper[5*(i-idx_tropo)+0] = log(h2o({1,i+1}));
-        input_upper[5*(i-idx_tropo)+1] = co2({1,1});
-        input_upper[5*(i-idx_tropo)+2] = log(o3({1,i+1}));
-        input_upper[5*(i-idx_tropo)+3] = log(play({1,i+1}));
-        input_upper[5*(i-idx_tropo)+4] = tlay({1,i+1});
-    }
-    //do inference Optical Depth
-    std::cout <<"++++++++++++++++++++++++++++++"<<std::endl;
-
-    inference(*context_upper_tau, input_upper, output_upper_tau,batchSize -  idx_tropo);
-    inference(*context_upper_ssa, input_upper, output_upper_ssa,batchSize -  idx_tropo);
-    std::cout <<"++++++++++++++++++++++++++++++"<<std::endl;
-    for (int icol=1; icol<=ncol; ++icol){
-    for (int ilay=idx_tropo+1; ilay<=batchSize; ++ilay){
-    for (int igpt=1; igpt<=ngpt; ++igpt){
-          idxlay = (igpt-1)+(ilay-1-idx_tropo)*ngpt+(icol-1)*(batchSize-idx_tropo)*ngpt;
-        std::cout<<"x "<<tau({icol, ilay, igpt})<<std::endl;
-
-//        std::cout<<igpt<<" "<<icol<<" "<<ilay<<" "<<idxlay<<std::endl;
-           tau({icol, ilay, igpt}) = output_upper_tau[idxlay] * dp[icol-1][ilay-1];
-           ssa({icol, ilay, igpt}) = std::min(std::max(output_upper_ssa[idxlay],nul),een);
-        std::cout<<"y "<<tau({icol, ilay, igpt})<<std::endl;
-
-            }
-        }
-    }
-
-    std::cout<<batchSize<<std::endl;
 }
 
 #ifdef FLOAT_SINGLE
