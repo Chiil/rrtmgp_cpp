@@ -96,11 +96,12 @@ class Gas_opticsNN : public Optical_props<TF>
                 IExecutionContext& context, 
                 float * input, 
                 float * output,
-                const int & batchSize) const;
+                const int & batchSize,
+                const int & Nin,
+                const int & Nout) const;
         void lay2sfc_factor(
                 const Array<TF,2>& tlay,
                 const Array<TF,1>& tsfc,
-                Array<TF,2>& sfc_factor,
                 Source_func_lw<TF>& sources,
                 const int& ncol,
                 const int& nlay,
