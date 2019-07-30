@@ -13,7 +13,7 @@
 #include <cmath>
 #include <fstream>
 #include <sstream>
-
+#include <Network.h>
 // Forward declarations.
 template<typename TF> class Optical_props;
 template<typename TF> class Optical_props_arry;
@@ -40,7 +40,7 @@ class Gas_opticsNN : public Optical_props<TF>
                 const Array<TF,1>& solar_src);
 
         // Longwave variant.
-        void gas_optics(
+        void gas_optics(Network& TLW,
                 const Array<TF,2>& play,
                 const Array<TF,2>& plev,
                 const Array<TF,2>& tlay,
@@ -70,7 +70,6 @@ class Gas_opticsNN : public Optical_props<TF>
         IExecutionContext* context_upper_ssa;
         IExecutionContext* context_lower_plk;
         IExecutionContext* context_upper_plk;
-
         void init_TRT_engines(
                 const Array<std::string,1> & plan_files);
 
@@ -82,7 +81,7 @@ class Gas_opticsNN : public Optical_props<TF>
                 const Gas_concs<TF>& gas_desc,
                 std::unique_ptr<Optical_props_arry<TF>>& optical_props) const;
 
-        void compute_tau_sources_NN(
+        void compute_tau_sources_NN(Network& TLW,
                 const int ncol, const int nlay, const int nband, const int ngpt,
                 const Array<TF,2>& play, 
                 const Array<TF,2>& plev,

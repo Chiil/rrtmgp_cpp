@@ -34,15 +34,28 @@
 #include "Fluxes.h"
 #include "Rte_lw.h"
 #include "Rte_sw.h"
+#include <time.h>
+#include <sys/time.h>
 
 #ifdef FLOAT_SINGLE_RRTMGP
 #define FLOAT_TYPE float
 #else
 #define FLOAT_TYPE double
 #endif
+    double get_wall_time()
+    {
+        struct timeval time;
+        if (gettimeofday(&time,NULL))
+        {
+            //  Handle error
+            return 0;
+        }
+        return (double)time.tv_sec + (double)time.tv_usec * .000001;
+    }
 
 namespace
 {
+    double starttime,endtime;
     std::vector<std::string> get_variable_string(
             const std::string& var_name,
             std::vector<int> i_count,
@@ -380,7 +393,7 @@ void solve_radiation(Master& master)
             std::make_unique<Optical_props_1scl<TF>>(n_col, n_lay, *kdist_lw);
 
     Source_func_lw<TF> sources(n_col, n_lay, *kdist_lw);
-
+    starttime = get_wall_time();
     kdist_lw->gas_optics(
             p_lay,
             p_lev,
@@ -391,6 +404,9 @@ void solve_radiation(Master& master)
             sources,
             col_dry,
             t_lev);
+    endtime = get_wall_time();
+    std::cout<<"longwave: "<<endtime-starttime<<std::endl;
+
 
     std::unique_ptr<Fluxes_broadband<TF>> fluxes =
             std::make_unique<Fluxes_broadband<TF>>(n_col, n_lev);
@@ -433,7 +449,7 @@ void solve_radiation(Master& master)
 
     std::unique_ptr<Optical_props_arry<TF>> optical_props_sw =
             std::make_unique<Optical_props_2str<TF>>(n_col, n_lay, *kdist_sw);
-
+    starttime = get_wall_time();
     kdist_sw->gas_optics(
             p_lay,
             p_lev,
@@ -442,6 +458,9 @@ void solve_radiation(Master& master)
             optical_props_sw,
             toa_src,
             col_dry);
+    endtime = get_wall_time();
+    std::cout<<"longwave: "<<endtime-starttime<<std::endl;
+
 
     const TF tsi_scaling = 0.4053176301654965;
     for (int igpt=1; igpt<=n_gpt_sw; ++igpt)
@@ -506,6 +525,7 @@ void solve_radiation(Master& master)
     output_nc.add_dimension("col", n_col);
     output_nc.add_dimension("lev", n_lev);
     output_nc.add_dimension("lay", n_lay);
+    output_nc.add_dimension("gpt", n_gpt_lw);
 
     auto nc_p_lev = output_nc.add_variable<TF>("lev", {"lev"});
     auto nc_p_lay = output_nc.add_variable<TF>("lay", {"lay"});
@@ -534,6 +554,12 @@ void solve_radiation(Master& master)
 
     auto nc_heating = output_nc.add_variable<TF>("heating", {"lay", "col"});
     nc_heating.insert(heating.v(), {0, 0});
+
+    auto nc_lw_gpt_flux_dn = output_nc.add_variable<TF>("lw_gpt_flux_dn" , {"gpt","lev", "col"});
+    nc_lw_gpt_flux_dn.insert(lw_gpt_flux_dn.v(),{0,0,0}); 
+    auto nc_lw_gpt_flux_up = output_nc.add_variable<TF>("lw_gpt_flux_up" , {"gpt","lev", "col"});
+    nc_lw_gpt_flux_up.insert(lw_gpt_flux_up.v(),{0,0,0});
+
 }
 
 int main()
