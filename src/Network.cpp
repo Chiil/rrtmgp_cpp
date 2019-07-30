@@ -24,8 +24,6 @@ void Network::Inference(
     const int Nbatch)
 {
     
-    for (int i = 0; i < Nbatch; ++i)
-    {
         Feedforward(
             Inputs,
             Outputs,
@@ -41,8 +39,7 @@ void Network::Inference(
             this->stdev_input.data(),
             this->mean_output.data(),
             this->stdev_output.data(),
-            i);  
-    } 
+            Nbatch);  
 }
 
 
@@ -61,74 +58,99 @@ void Network::Feedforward(
     float *input_stdev,
     float *output_mean,
     float *output_stdev,
-    const int offset)
+    const int Nbatch)
 
 {
-    float layer1[N_lay1];
-    float layer2[N_lay2];
-    float layer3[N_lay3];
+    float layer1[N_lay1*Nbatch];
+    float layer2[N_lay2*Nbatch];
+    float layer3[N_lay3*Nbatch];
 
     //normalize with mean and st. dev.
-    for (int j = 0; j < N_layI; ++j)
+    for (int j = 0; j < Nbatch; ++j)
         {
-            const int idxin = j + offset * N_layI;
-            input[idxin] = (input[idxin] - input_mean[j]) / input_stdev[j];
+            for (int k = 0; k < N_layI; ++k)
+            {
+                const int idxin = k + j * N_layI;
+                input[idxin] = (input[idxin] - input_mean[k]) / input_stdev[k];
+            }   
         }
-
     //first layer
-    for (int i = 0; i < N_lay1; ++i)
+    for (int i = 0; i < Nbatch; ++i)
     {
-        layer1[i] = 0.;
-        for (int j = N_layI * offset; j < (N_layI * (1 + offset)); ++j)
+        for (int j = 0; j < N_lay1; ++j)
         {
-            const int idx = j-offset*N_layI + i*N_layI;
-            layer1[i] += layer1_wgth[idx] * input[j];
-
+            const int layidx = j + i * N_lay1;
+            layer1[layidx] = 0.;
+            for (int k = 0; k < N_layI; ++k)
+            {
+                const int wgtidx = k + j * N_layI;
+                const int inpidx = k + i * N_layI;
+                layer1[layidx] += layer1_wgth[wgtidx] * input[inpidx];
+    
+            }
+            layer1[layidx] += layer1_bias[j];
+            layer1[layidx] = std::max(0.2f * layer1[layidx], layer1[layidx]);
         }
-        layer1[i] += layer1_bias[i];
-        layer1[i] = std::max(0.2f * layer1[i], layer1[i]);
-
     }
 
     //second layer
-    for (int i = 0; i < N_lay2; ++i)
+    for (int i = 0; i < Nbatch; ++i)
     {
-        layer2[i] = 0.;
-        for (int j = 0; j < N_lay1; ++j)
+        for (int j = 0; j < N_lay2; ++j)
         {
-            const int idx = j + i*N_lay1;
-            layer2[i] += layer2_wgth[idx] * layer1[j];
+            const int layidx = j + i * N_lay2;
+            layer2[layidx] = 0.;
+            for (int k = 0; k < N_lay1; ++k)
+            {
+                const int wgtidx = k + j * N_lay1;
+                const int inpidx = k + i * N_lay1;
+                layer2[layidx] += layer2_wgth[wgtidx] * layer1[inpidx];
+
+            }
+            layer2[layidx] += layer2_bias[j];
+            layer2[layidx] = std::max(0.2f * layer2[layidx], layer2[layidx]);
         }
-        layer2[i] += layer2_bias[i];
-        layer2[i] = std::max(0.2f * layer2[i], layer2[i]);
     }
 
     //third layer
-    for (int i = 0; i < N_lay3; ++i)
+    for (int i = 0; i < Nbatch; ++i)
     {
-        layer3[i] = 0.;
-        for (int j = 0; j < N_lay2; ++j)
-        {
-            const int idx = j + i*N_lay2;     
-            layer3[i] += layer3_wgth[idx] * layer2[j];
-        }
-        layer3[i] += layer3_bias[i];
-        layer3[i] = std::max(0.2f * layer3[i], layer3[i]);
-    }
-
-    //output layer and denormalize
-    for (int i = 0; i < N_layO; ++i)
-    {
-        const int idxout = i + offset*N_layO;
-        output[idxout] = 0.;
         for (int j = 0; j < N_lay3; ++j)
         {
-            const int idx = j + i*N_lay3;
-            output[idxout] += output_wgth[idx] * layer3[j];
+            const int layidx = j + i * N_lay3;
+            layer3[layidx] = 0.;
+            for (int k = 0; k < N_lay2; ++k)
+            {
+                const int wgtidx = k + j * N_lay2;
+                const int inpidx = k + i * N_lay2;
+                layer3[layidx] += layer3_wgth[wgtidx] * layer2[inpidx];
+
+            }
+            layer3[layidx] += layer3_bias[j];
+            layer3[layidx] = std::max(0.2f * layer3[layidx], layer3[layidx]);
         }
-        output[idxout] = exp(((output[idxout] +  output_bias[i]) * output_stdev[i]) + output_mean[i]) ;
     }
 
+
+    //output layer and denormalize
+   for (int i = 0; i < Nbatch; ++i)
+    {
+        for (int j = 0; j < N_layO; ++j)
+        {
+            const int layidx = j + i * N_layO;
+            output[layidx] = 0.;
+            for (int k = 0; k < N_lay3; ++k)
+            {
+                const int wgtidx = k + j * N_lay3;
+                const int inpidx = k + i * N_lay3;
+                output[layidx] += output_wgth[wgtidx] * layer3[inpidx];
+
+            }
+            output[layidx] = ((output[layidx] +  output_bias[j]) * output_mean[j]) + output_stdev[j] ;
+ 
+        }
+    }
+std::cout<<"Network2 "<<output[2]<<" "<<output[30]<<std::endl;
 
 }
 
@@ -171,7 +193,7 @@ Network::Network(){
         } 
 
     for (int i = 0; i < N_lay1; ++i)
-        this->layer1_bias.push_back( lay1_bias[i]);
+            this->layer1_bias.push_back( lay1_bias[i]);
 
     for (int i = 0; i < N_lay2; ++i)
         this->layer2_bias.push_back(lay2_bias[i]);

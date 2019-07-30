@@ -33,7 +33,7 @@ class Network
             float *input_stdev,
             float *output_mean,
             float *output_stdev,
-            const int offset);
+            const int Nbatch);
 
         std::vector<float> layer1_wgth;//{N_lay1 * N_layO};
         std::vector<float> layer2_wgth;//{N_lay2 * N_lay1};
