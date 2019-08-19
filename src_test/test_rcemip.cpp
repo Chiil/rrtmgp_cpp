@@ -459,7 +459,7 @@ void solve_radiation(Master& master)
             toa_src,
             col_dry);
     endtime = get_wall_time();
-    std::cout<<"longwave: "<<endtime-starttime<<std::endl;
+    std::cout<<"shortwavee: "<<endtime-starttime<<std::endl;
 
 
     const TF tsi_scaling = 0.4053176301654965;

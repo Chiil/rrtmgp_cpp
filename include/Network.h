@@ -4,59 +4,50 @@
 #include <fstream>
 #include <vector>
 #include <iostream>
-const int N_layI=4;
-const int N_lay1=32;
-const int N_lay2=64;
-const int N_lay3=128;
-const int N_layO=256;
 
 class Network
 {
-    private:
-        void file_reader(
-            float *weights,
-            std::string filename,
-            int N);
-
-        void Feedforward(
-            float *input,
-            float *output,
-            float *layer1_wgth,
-            float *layer2_wgth,
-            float *layer3_wgth,
-            float *output_wgth,
-            float *layer1_bias,
-            float *layer2_bias,
-            float *layer3_bias,
-            float *output_bias,
-            float *input_mean,
-            float *input_stdev,
-            float *output_mean,
-            float *output_stdev,
-            const int Nbatch);
-
-        std::vector<float> layer1_wgth;//{N_lay1 * N_layO};
-        std::vector<float> layer2_wgth;//{N_lay2 * N_lay1};
-        std::vector<float> layer3_wgth;//{N_lay3 * N_lay2};
-        std::vector<float> output_wgth;//{N_layO * N_lay3};
-        std::vector<float> layer1_bias;//{N_lay1};
-        std::vector<float> layer2_bias;//{N_lay2};
-        std::vector<float> layer3_bias;//{N_lay3};
-        std::vector<float> output_bias;//{N_layO}; 
-
-        std::vector<float> mean_input;//{N_layO};
-        std::vector<float> stdev_input;//{N_layO};
-        std::vector<float> mean_output;//{N_layO};
-        std::vector<float> stdev_output;//{N_layO};
-
-
-
     public:
         void Inference(
-            float *Inputs,
-            float *Outputs,
-            const int Nbatch);
+            float* inputs,
+            float* outputs);
 
-    Network();
+        Network(const int Nbatch,
+                const char bias1[20],
+                const char bias2[20],
+                const char bias3[20],
+                const char bias4[20],
+                const char wgth1[20],
+                const char wgth2[20],
+                const char wgth3[20],
+                const char wgth4[20],
+                const char Min[25],
+                const char Sin[25],
+                const char Mout[25],
+                const char Sout[25],
+                const int N_layO);
 
+    private:
+        void file_reader(
+            float* weights,
+            const std::string& filename,
+            const int N);
+
+        int Nbatch;
+        int N_layO;
+        std::vector<float> layer1_wgth;
+        std::vector<float> layer2_wgth;
+        std::vector<float> layer3_wgth;
+        std::vector<float> output_wgth;
+        std::vector<float> layer1_bias;
+        std::vector<float> layer2_bias;
+        std::vector<float> layer3_bias;
+        std::vector<float> output_bias;
+        std::vector<float> mean_input;
+        std::vector<float> stdev_input;
+        std::vector<float> mean_output;
+        std::vector<float> stdev_output;
+        std::vector<float> layer1;
+        std::vector<float> layer2;
+        std::vector<float> layer3;        
 };

@@ -26,7 +26,7 @@
 #define GAS_OPTICS_H
 
 #include <string>
-
+#include <memory>
 #include "Array.h"
 
 // Forward declarations.

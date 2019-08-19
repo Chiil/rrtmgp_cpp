@@ -37,7 +37,8 @@ class Gas_opticsNN : public Optical_props<TF>
                 const Array<std::string,1>& gas_names,
                 const Array<int,2>& band2gpt,
                 const Array<TF,2>& band_lims_wavenum,
-                const Array<TF,1>& solar_src);
+                const Array<TF,1>& solar_src,
+                const bool do_taussa);
 
         // Longwave variant.
         void gas_optics(Network& TLW,
@@ -57,11 +58,16 @@ class Gas_opticsNN : public Optical_props<TF>
                 const Array<TF,2>& tlay,
                 const Gas_concs<TF>& gas_desc,
                 std::unique_ptr<Optical_props_arry<TF>>& optical_props,
-                Array<TF,2>& toa_src)  const;
+                Array<TF,2>& toa_src,
+                Network& SSA_upper,
+                Network& SSA_lower,
+                Network& TSW_upper,
+                Network& TSW_lower) const;
 
     private:
         const TF press_ref_trop = 9948.431564193395; //network is trained on this, so might as well hardcode it
         bool is_longwave;   
+        bool do_taussa;
         Array<std::string,1> gas_names;
         Array<TF,1> solar_src;
         IExecutionContext* context_lower_tau;
@@ -70,10 +76,17 @@ class Gas_opticsNN : public Optical_props<TF>
         IExecutionContext* context_upper_ssa;
         IExecutionContext* context_lower_plk;
         IExecutionContext* context_upper_plk;
+        IExecutionContext* context_lower_ray;
+        IExecutionContext* context_upper_ray;
+        IExecutionContext* context_lower_abs;
+        IExecutionContext* context_upper_abs;
+
         void init_TRT_engines(
                 const Array<std::string,1> & plan_files);
 
         void compute_tau_ssa_NN(
+                Network& SSA_upper,Network& SSA_lower,
+                Network& TSW_upper,Network& TSW_lower,
                 const int ncol, const int nlay, const int ngpt, const int nband,
                 const Array<TF,2>& play,
                 const Array<TF,2>& plev,
@@ -98,6 +111,7 @@ class Gas_opticsNN : public Optical_props<TF>
                 const int & batchSize,
                 const int & Nin,
                 const int & Nout) const;
+
         void lay2sfc_factor(
                 const Array<TF,2>& tlay,
                 const Array<TF,1>& tsfc,

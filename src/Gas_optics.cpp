@@ -394,6 +394,7 @@ namespace
 }
 
 // IMPLEMENTATION OF CLASS FUNCTIONS.
+// default constructor to be compiled with Cython
 // Constructor of longwave variant.
 template<typename TF>
 Gas_optics<TF>::Gas_optics(
@@ -783,12 +784,13 @@ void Gas_optics<TF>::gas_optics(
             jtemp, jpress, jeta, tropo, fmajor,
             col_dry);
 
-    // External sources.
-    source(
-            ncol, nlay, nband, ngpt,
-            play, plev, tlay, tsfc,
-            jtemp, jpress, jeta, tropo, fmajor,
-            sources, tlev);
+// Temporarily commented out to test gasoptics only solver
+////    // External sources.
+////    source(
+////            ncol, nlay, nband, ngpt,
+////            play, plev, tlay, tsfc,
+////            jtemp, jpress, jeta, tropo, fmajor,
+////            sources, tlev);
 }
 
 // Gas optics solver shortwave variant.
