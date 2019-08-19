@@ -89,6 +89,7 @@ class Gas_opticsNN : public Optical_props<TF>
                 Network& TSW_upper,Network& TSW_lower,
                 const int ncol, const int nlay, const int ngpt, const int nband,
                 const Array<TF,2>& play,
+
                 const Array<TF,2>& plev,
                 const Array<TF,2>& tlay,
                 const Gas_concs<TF>& gas_desc,
