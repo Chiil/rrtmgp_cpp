@@ -269,7 +269,6 @@ void solve_radiation(Master& master)
 
     Source_func_lw<TF> sources(n_col, n_lay, *kdist_lw);
     starttime=get_wall_time();
-
     kdist_lw->gas_optics(TLW,
             p_lay,
             p_lev,
@@ -280,6 +279,21 @@ void solve_radiation(Master& master)
             sources,
             t_lev);
     endtime = get_wall_time();
+    std::cout<<"LONGWAVE "<<endtime-starttime<<std::endl;
+    starttime=get_wall_time();
+    kdist_lw->gas_optics(TLW,
+            p_lay,
+            p_lev,
+            t_lay,
+            t_sfc,
+            gas_concs,
+            optical_props_lw,
+            sources,
+            t_lev);
+    endtime = get_wall_time();
+    std::cout<<"LONGWAVE "<<endtime-starttime<<std::endl;
+
+
 
     std::unique_ptr<Fluxes_broadband<TF>> fluxes =
             std::make_unique<Fluxes_broadband<TF>>(n_col, n_lev);
@@ -424,6 +438,7 @@ void solve_radiation(Master& master)
     output_nc.add_dimension("col", n_col);
     output_nc.add_dimension("lev", n_lev);
     output_nc.add_dimension("lay", n_lay);
+    output_nc.add_dimension("gpt", n_gpt_lw);
 
     auto nc_p_lev = output_nc.add_variable<TF>("lev", {"lev"});
     auto nc_p_lay = output_nc.add_variable<TF>("lay", {"lay"});
@@ -452,6 +467,10 @@ void solve_radiation(Master& master)
 
     auto nc_heating = output_nc.add_variable<TF>("heating", {"lay", "col"});
     nc_heating.insert(heating.v(), {0, 0});
+    auto nc_lw_gpt_flux_dn = output_nc.add_variable<TF>("lw_gpt_flux_dn" , {"gpt","lev", "col"});
+    nc_lw_gpt_flux_dn.insert(lw_gpt_flux_dn.v(),{0,0,0});
+    auto nc_lw_gpt_flux_up = output_nc.add_variable<TF>("lw_gpt_flux_up" , {"gpt","lev", "col"});
+    nc_lw_gpt_flux_up.insert(lw_gpt_flux_up.v(),{0,0,0});
 }
 
 int main()
@@ -463,6 +482,7 @@ int main()
         master.init();
 
         solve_radiation<FLOAT_TYPE>(master);
+
     }
 
     // Catch any exceptions and return 1.

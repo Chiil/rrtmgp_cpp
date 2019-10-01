@@ -6,14 +6,74 @@
 #include <vector>
 #include <iostream>
 #include <Network.h>
+#include <mkl_cblas.h>
+#include <time.h>
+#include <sys/time.h>
 #define restrict __restrict__
 namespace
 {
+    double get_wall_time3()
+    {
+        struct timeval time;
+        if (gettimeofday(&time,NULL))
+        {
+            //  Handle error
+            return 0;
+        }
+        return (double)time.tv_sec + (double)time.tv_usec * .000001;
+    }
+    double mystart,myend;
     constexpr int N_layI=4;
     constexpr int N_lay1=32;
     constexpr int N_lay2=64;
     constexpr int N_lay3=128;
-//  constexpr int N_layO=256;
+
+    extern "C" void cblas_sgemm(
+    const  CBLAS_ORDER, const  CBLAS_TRANSPOSE, const  CBLAS_TRANSPOSE, const int, const int, const int,
+    const float, const float*, const int, const float*, const int, const float, const float*, const int);
+
+    inline float leaky_relu(const float a) {return std::max(0.2f*a,a); }
+
+    inline void bias_and_activate(float* __restrict__ output, const float* __restrict__ bias, const int Nout, const int Nbatch)
+    {
+        for (int i = 0; i < Nout  ; ++i)
+            {
+                for (int j = 0; j < Nbatch; ++j)
+                    output[j+i*Nbatch] = leaky_relu(output[j+i*Nbatch] + bias[i]);
+            }
+    }
+
+    void transpose(float* restrict matrix, const int Ncol, const int Nrow)
+    {
+        float tmp[Ncol*Nrow];
+        for (int i = 0; i < Ncol; ++i)
+            for (int j = 0; j < Nrow; ++j)
+                tmp[j+i*Nrow] = matrix[i+j*Ncol];
+            
+        for (int i = 0; i < Ncol; ++i)
+            for (int j = 0; j < Nrow; ++j)
+                matrix[j+i*Nrow] = tmp[j+i*Nrow];
+    }
+
+    void matmul_blas(
+            const int Nbatch,
+            const int Nrow, 
+            const int Ncol, 
+            const float* restrict weights,
+            const float* restrict bias,
+            float* restrict const layer_in,
+            float* restrict const layer_out,
+            const int trans)
+    {
+        if (trans==1)
+        {
+            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, Nrow,Nbatch,Ncol,1.,weights,Ncol,layer_in,Ncol ,0.,layer_out,Nbatch);       
+        } else {
+            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, Nrow,Nbatch,Ncol,1.,weights,Ncol,layer_in,Nbatch ,0.,layer_out,Nbatch);       
+        }
+        bias_and_activate(layer_out,bias,Nrow,Nbatch);
+    }        		
+
 
     void matmul_leakyrelu(
             const int Nbatch,
@@ -24,6 +84,7 @@ namespace
             float* restrict const layer_in,
             float* restrict const layer_out)
     {
+ 
         for (int i=0; i<Nbatch; ++i)
         {
             for (int j=0; j<Nrow; ++j)
@@ -70,43 +131,68 @@ namespace
             const int Nbatch,
             const int N_layO)
     
-    {   
-        //normalize with mean and st. dev.
-        for (int j=0; j<Nbatch; ++j)
-        {
-            for (int k=0; k<N_layI; ++k)
-            {
-                const int idxin = k + j * N_layI;
-                input[idxin]=(input[idxin] - input_mean[k]) / input_stdev[k];
-            }   
-        }
+    {  
+      std::cout<<"batch size: "<<Nbatch<<std::endl; 
+      //normalization and manual solver     
+////  for (int j=0; j<Nbatch; ++j)
+////  {
+////      for (int k=0; k<N_layI; ++k)
+////      {
+////          const int idxin = k + j * N_layI;
+////          input[idxin]=(input[idxin] - input_mean[k]) / input_stdev[k];
+////      }   
+////  }
+////      matmul_leakyrelu(Nbatch,N_lay1,N_layI,layer1_wgth,layer1_bias,input,layer1);
+////      matmul_leakyrelu(Nbatch,N_lay2,N_lay1,layer2_wgth,layer2_bias,layer1,layer2);
+////          mystart = get_wall_time3();
+////      matmul_leakyrelu(Nbatch,N_lay3,N_lay2,layer3_wgth,layer3_bias,layer2,layer3);
+////          myend = get_wall_time3();
+////          std::cout<<"time: "<<myend-mystart<<std::endl;
+////      for (int i=0; i<Nbatch; ++i)
+////      {
+////          for (int j=0; j<N_layO; ++j)
+////          {
+////              const int layidx=i + j * Nbatch;
+////              output[layidx] = 0.;
+////              for (int k=0; k<N_lay3; ++k)
+////              {
+////                  const int wgtidx = k + j * N_lay3;
+////                  const int inpidx = k + i * N_lay3;
+////                  output[layidx] += output_wgth[wgtidx] * layer3[inpidx];
+////              }
+////          }
+////      }
+////
 
-        //first layer
-        matmul_leakyrelu(Nbatch,N_lay1,N_layI,layer1_wgth,layer1_bias,input,layer1);
-   
-        //second layer
-        matmul_leakyrelu(Nbatch,N_lay2,N_lay1,layer2_wgth,layer2_bias,layer1,layer2);
 
-        //third layer
-        matmul_leakyrelu(Nbatch,N_lay3,N_lay2,layer3_wgth,layer3_bias,layer2,layer3);
+          //normalization and blas solver
+          for (int k=0; k<N_layI; ++k)
+          {
+              for (int i=0; i<Nbatch; ++i)
+              {
+                  const int idxin = i + k * Nbatch;
+                  input[idxin]=(input[idxin] - input_mean[k]) / input_stdev[k];
+              }   
+          }
+         matmul_blas(Nbatch,N_lay1,N_layI,layer1_wgth,layer1_bias,input,layer1,0);
+         matmul_blas(Nbatch,N_lay2,N_lay1,layer2_wgth,layer2_bias,layer1,layer2,0);
+             mystart = get_wall_time3();
+         matmul_blas(Nbatch,N_lay3,N_lay2,layer3_wgth,layer3_bias,layer2,layer3,0);
+            myend = get_wall_time3();
+            std::cout<<"time: "<<myend-mystart<<std::endl;
+         cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N_layO,Nbatch,N_lay3,1.,output_wgth,N_lay3,layer3,Nbatch,0.,output,Nbatch);
     
-        //output layer and denormalize
-        for (int i=0; i<Nbatch; ++i)
-        {
-            for (int j=0; j<N_layO; ++j)
-            {
-                const int layidx = j + i * N_layO;
-                output[layidx] = 0.;
-                for (int k=0; k<N_lay3; ++k)
-                {
-                    const int wgtidx = k + j * N_lay3;
-                    const int inpidx = k + i * N_lay3;
-                    output[layidx] += output_wgth[wgtidx] * layer3[inpidx];
     
-                }
-                output[layidx] = expf(((output[layidx] +  output_bias[j]) * output_stdev[j]) + output_mean[j]) ;
-            }
-        }
+         //output layer and denormalize
+         for (int j=0; j<N_layO; ++j)
+         {
+             for (int i=0; i<Nbatch; ++i)
+             {
+                 const int layidx = i + j * Nbatch;
+                 output[layidx] = faster_but_inaccurate_exp(((output[layidx] +  output_bias[j]) * output_stdev[j]) + output_mean[j]) ;
+             }
+         }
+        
     }
 }
 
@@ -167,7 +253,7 @@ Network::Network(const int Nbatch,
                  const int N_layO)
 {
     this->Nbatch = Nbatch;
-    this->N_layO  = N_layO;
+    this->N_layO = N_layO;
 
     float lay1_bias[N_lay1];
     float lay2_bias[N_lay2];

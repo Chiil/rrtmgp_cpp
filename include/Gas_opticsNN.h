@@ -1,5 +1,6 @@
 #ifndef GAS_OPTICSNN_H
 #define GAS_OPTICSNN_H
+
 #include <string>
 #include "Array.h"
 #include <iostream>
@@ -14,6 +15,7 @@
 #include <fstream>
 #include <sstream>
 #include <Network.h>
+
 // Forward declarations.
 template<typename TF> class Optical_props;
 template<typename TF> class Optical_props_arry;

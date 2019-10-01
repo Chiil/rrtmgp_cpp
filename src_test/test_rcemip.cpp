@@ -317,6 +317,29 @@ void load_gas_concs(Gas_concs<TF>& gas_concs, Netcdf_file& input_nc)
             rad_nc.get_variable<TF>("o2"));
     gas_concs.set_vmr("n2",
             rad_nc.get_variable<TF>("n2"));
+
+    gas_concs.set_vmr("cfc11",
+            rad_nc.get_variable<TF>("cfc11"));
+    gas_concs.set_vmr("cfc12",
+            rad_nc.get_variable<TF>("cfc12"));
+    gas_concs.set_vmr("hfc143a",
+            rad_nc.get_variable<TF>("hfc143a"));
+    gas_concs.set_vmr("hfc134a",
+            rad_nc.get_variable<TF>("hfc134a"));
+    gas_concs.set_vmr("hfc125",
+            rad_nc.get_variable<TF>("hfc125"));
+    gas_concs.set_vmr("cf4",
+            rad_nc.get_variable<TF>("cf4"));
+    gas_concs.set_vmr("cfc22",
+            rad_nc.get_variable<TF>("cfc22"));
+    gas_concs.set_vmr("hfc23",
+            rad_nc.get_variable<TF>("hfc23"));
+    gas_concs.set_vmr("hfc32",
+            rad_nc.get_variable<TF>("hfc32"));
+
+
+
+
 }
 
 template<typename TF>

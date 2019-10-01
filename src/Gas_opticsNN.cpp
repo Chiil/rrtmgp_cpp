@@ -1,6 +1,6 @@
 #include <cmath>
 #include <numeric>
-#include <boost/algorithm/string.hpp>
+//#include <boost/algorithm/string.hpp>
 #include "Gas_concs.h"
 #include "Gas_opticsNN.h"
 #include "Array.h"
@@ -319,10 +319,10 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
     {
         float output_lower_tau[idx_tropo*ngpt];
         float output_lower_ssa[idx_tropo*ngpt];
-        TSW_lower.Inference(input_lower,output_lower_tau);
-        SSA_lower.Inference(input_lower,output_lower_ssa);
-        //inference(*this->context_lower_tau, input_lower, output_lower_tau, idx_tropo, Ninput, ngpt);
-        //inference(*this->context_lower_ssa, input_lower, output_lower_ssa, idx_tropo, Ninput, ngpt);
+        //TSW_lower.Inference(input_lower,output_lower_tau);
+        //SSA_lower.Inference(input_lower,output_lower_ssa);
+        inference(*this->context_lower_tau, input_lower, output_lower_tau, idx_tropo, Ninput, ngpt);
+        inference(*this->context_lower_ssa, input_lower, output_lower_ssa, idx_tropo, Ninput, ngpt);
         for (int icol=1; icol<=ncol; ++icol)
              for (int ilay=1; ilay<=idx_tropo; ++ilay)
                 {
@@ -370,10 +370,10 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
     //do inference Optical Depth
         float output_upper_tau[(batchSize - idx_tropo)*ngpt];
         float output_upper_ssa[(batchSize - idx_tropo)*ngpt];
-        TSW_upper.Inference(input_upper,output_upper_tau);
-        SSA_upper.Inference(input_upper,output_upper_ssa);
-        //inference(*this->context_upper_tau, input_upper, output_upper_tau,batchSize -  idx_tropo, Ninput, ngpt);
-        //inference(*this->context_upper_ssa, input_upper, output_upper_ssa,batchSize -  idx_tropo, Ninput, ngpt);
+        //TSW_upper.Inference(input_upper,output_upper_tau);
+        //SSA_upper.Inference(input_upper,output_upper_ssa);
+        inference(*this->context_upper_tau, input_upper, output_upper_tau,batchSize -  idx_tropo, Ninput, ngpt);
+        inference(*this->context_upper_ssa, input_upper, output_upper_ssa,batchSize -  idx_tropo, Ninput, ngpt);
         for (int icol=1; icol<=ncol; ++icol)
             for (int ilay=idx_tropo+1; ilay<=batchSize; ++ilay)
                 {
@@ -409,16 +409,7 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
                 }
     }
 
-
-
-
-
-
-
-
-
 }
-
 
 
 //Neural Network optical property function for longwave
@@ -456,66 +447,129 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,
     const Array<TF,2>& o3  = gas_desc.get_vmr(this->gas_names({3}));
 
     //// Lower atmosphere:
-    //fill input array
+    //fill input array  
+    starttime = get_wall_time2();
     float input_lower_tau[idx_tropo*Ninput];
     float input_lower_plk[idx_tropo*(Ninput+2)];
     float output_lower_tau[idx_tropo*ngpt];
     float output_lower_plk[idx_tropo*ngpt*3];
-    for (int i = 0; i < idx_tropo; i++)
+////    for (int i = 0; i < idx_tropo; i++)
+////    {
+////        input_lower_tau[i*Ninput+0] = log(h2o({1,i+1}));
+////        input_lower_plk[i*(Ninput2)+0] = log(h2o({1,i+1}));
+////
+////        input_lower_tau[i*Ninput+1] = log(o3({1,i+1}));
+////        input_lower_plk[i*(Ninput2)+1] = log(o3({1,i+1}));
+////
+////        input_lower_tau[i*Ninput+2] = log(play({1,i+1}));
+////        input_lower_plk[i*(Ninput2)+2] = log(play({1,i+1}));
+////
+////        input_lower_tau[i*Ninput+3] = tlay({1,i+1});
+////        input_lower_plk[i*(Ninput2)+3] = tlay({1,i+1});
+////
+////        input_lower_plk[i*(Ninput2)+4] = tlev({1,i+1});
+////        input_lower_plk[i*(Ninput2)+5] = tlev({1,i+2});
+////    }
+
+    for (int i = 0; i < idx_tropo; ++i)
     {
-        input_lower_tau[i*Ninput+0] = log(h2o({1,i+1}));
-        input_lower_plk[i*(Ninput2)+0] = log(h2o({1,i+1}));
-
-        input_lower_tau[i*Ninput+1] = log(o3({1,i+1}));
-        input_lower_plk[i*(Ninput2)+1] = log(o3({1,i+1}));
-
-        input_lower_tau[i*Ninput+2] = log(play({1,i+1}));
-        input_lower_plk[i*(Ninput2)+2] = log(play({1,i+1}));
-
-        input_lower_tau[i*Ninput+3] = tlay({1,i+1});
-        input_lower_plk[i*(Ninput2)+3] = tlay({1,i+1});
-
-        input_lower_plk[i*(Ninput2)+4] = tlev({1,i+1});
-        input_lower_plk[i*(Ninput2)+5] = tlev({1,i+2});
-
+        const float val = log(h2o({1,i+1}));
+        input_lower_tau[i] = val;
+        input_lower_plk[i] = val;
     }
+    int startidx = idx_tropo * 1;
+    for (int i = 0; i < idx_tropo; ++i)
+    {
+        const float val = log(o3({1,i+1}));
+        const int idx   = startidx + i;
+        input_lower_tau[idx] = val;
+        input_lower_plk[idx] = val;
+    }
+
+    startidx = idx_tropo * 2;
+    for (int i = 0; i < idx_tropo; ++i)
+    {
+        const float val = log(play({1,i+1}));
+        const int idx   = startidx + i;
+        input_lower_tau[idx] = val;
+        input_lower_plk[idx] = val;
+    }
+
+    startidx = idx_tropo * 3;
+    for (int i = 0; i < idx_tropo; ++i)
+    {
+        const float val = tlay({1,i+1});
+        const int idx   = startidx + i;
+        input_lower_tau[idx] = val;
+        input_lower_plk[idx] = val;
+    }
+
+    startidx = idx_tropo * 4;
+    input_lower_plk[startidx] = tlev({1,1});
+    for (int i = 0; i < idx_tropo-1; ++i)
+    {
+        const float val = tlev({1,i+2});
+        const int idx = startidx+2*i;
+        input_lower_plk[idx + 1] = val;
+        input_lower_plk[idx + 2] = val;
+    }
+    input_lower_plk[idx_tropo * 6 - 1] = tlev({1,idx_tropo+1});
+
+
+
+
+
+    std::cout<<"inpvals: "<<input_lower_tau[0]<<" "<<input_lower_tau[idx_tropo*Ninput-1]<<std::endl;
+    std::cout<<"inpvals: "<<input_lower_plk[0]<<" "<<input_lower_plk[idx_tropo*(Ninput+2)-1]<<std::endl;
+
+
+
     float dp[ncol][nlay];
     for (int ilay=1; ilay<=nlay; ++ilay)
         for (int icol=1; icol<=ncol; ++icol)
         {
            dp[icol-1][ilay-1] = abs(plev({icol,ilay})-plev({icol,ilay+1}));
         }
-     inference(*this->context_lower_tau, input_lower_tau, output_lower_tau, idx_tropo, Ninput, ngpt);
-   
+    endtime = get_wall_time2();
+    std::cout<<"input time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
+    
     //do inference Optical Depth
     starttime = get_wall_time2();
-    inference(*this->context_lower_tau, input_lower_tau, output_lower_tau, idx_tropo, Ninput, ngpt);
-    endtime = get_wall_time2();  
-    std::cout<<"TensorRT time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
 
-    starttime = get_wall_time2();
+////    inference(*this->context_lower_tau, input_lower_tau, output_lower_tau, idx_tropo, Ninput, ngpt);
     TLW.Inference(input_lower_tau,output_lower_tau);
     endtime = get_wall_time2();
-    std::cout<<"ManualNN time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
+
+    std::cout<<"NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
 
 
+    starttime=get_wall_time2()                                                                             ;
+    for (int igpt=1; igpt<=ngpt; ++igpt)
+        for (int icol=1; icol<=ncol; ++icol)
+            for (int ilay=1; ilay<=idx_tropo; ++ilay)
+            {
+                const int idxlay1 = (ilay-1)+(icol-1)*idx_tropo+(igpt-1)*idx_tropo*ncol;
+                tau({icol, ilay, igpt}) = output_lower_tau[idxlay1] * dp[icol-1][ilay-1];
+            }
+    endtime = get_wall_time2();
+    std::cout<<"store_tau time: "<<endtime-starttime<<" "<<tau({2,2,2})<<std::endl;
+
+    
     inference(*this->context_lower_plk, input_lower_plk, output_lower_plk, idx_tropo, Ninput+2, ngpt*3);
     for (int icol=1; icol<=ncol; ++icol)
         for (int ilay=1; ilay<=idx_tropo; ++ilay)
             {
-                const float delta_p = dp[icol-1][ilay-1];
                 for (int igpt=1; igpt<=ngpt; ++igpt)
                 {
-                    const int idxlay1 = (igpt-1)+(ilay-1)*ngpt+(icol-1)*idx_tropo*ngpt;
                     const int idxlay2 = (igpt-1)+(ilay-1)*ngpt*3+(icol-1)*idx_tropo*ngpt*3;
-                    tau({icol, ilay, igpt}) = output_lower_tau[idxlay1] * delta_p;
                     src_layer({icol, ilay, igpt}) = output_lower_plk[idxlay2];
                     src_lvinc({icol, ilay, igpt}) = output_lower_plk[idxlay2+ngpt];
                     src_lvdec({icol, ilay, igpt}) = output_lower_plk[idxlay2+ngpt*2];
 
                 }
             }
-    
+
+  
     //// Upper atmosphere:
     //fill input array
     float input_upper_tau[(batchSize - idx_tropo)*Ninput];

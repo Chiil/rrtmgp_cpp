@@ -83,7 +83,7 @@ namespace
 
             // Search for
             std::string gas_minor_trimmed = gas_minor({idx_mnr});
-            boost::trim(gas_minor_trimmed);
+            //boost::trim(gas_minor_trimmed);
 
             gas_is_present({i}) = available_gases.exists(gas_minor_trimmed);
             if (gas_is_present({i}))
@@ -785,12 +785,12 @@ void Gas_optics<TF>::gas_optics(
             col_dry);
 
 // Temporarily commented out to test gasoptics only solver
-////    // External sources.
-////    source(
-////            ncol, nlay, nband, ngpt,
-////            play, plev, tlay, tsfc,
-////            jtemp, jpress, jeta, tropo, fmajor,
-////            sources, tlev);
+    // External sources.
+    source(
+            ncol, nlay, nband, ngpt,
+            play, plev, tlay, tsfc,
+            jtemp, jpress, jeta, tropo, fmajor,
+            sources, tlev);
 }
 
 // Gas optics solver shortwave variant.
@@ -1101,6 +1101,9 @@ void Gas_optics<TF>::compute_gas_taus(
             for (int icol=1; icol<=ncol; ++icol)
                 col_gas({icol, ilay, igas}) = vmr({icol, ilay, igas}) * col_dry({icol, ilay});
 
+
+
+
     // Call the fortran kernels
     rrtmgp_kernel_launcher::zero_array(ngpt, nlay, ncol, tau);
 
@@ -1163,6 +1166,7 @@ void Gas_optics<TF>::compute_gas_taus(
             play, tlay, col_gas,
             jeta, jtemp, jpress,
             tau);
+
 
     bool has_rayleigh = (this->krayl.size() > 0);
 
