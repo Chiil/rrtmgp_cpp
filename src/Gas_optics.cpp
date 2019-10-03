@@ -783,7 +783,9 @@ void Gas_optics<TF>::gas_optics(
             optical_props,
             jtemp, jpress, jeta, tropo, fmajor,
             col_dry);
-
+    Array<TF,3>& tau = optical_props->get_tau();
+    std::cout<<"yeah "<<tau({1,1,1})<<" & "<<tau({1,3,6})<<std::endl;
+ 
 // Temporarily commented out to test gasoptics only solver
     // External sources.
     source(

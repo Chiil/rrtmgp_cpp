@@ -163,6 +163,10 @@ namespace
                 band_lims);
     }
 
+    std::vector<float> load_weights(Netcdf_group group)
+    {
+        return group.get_variable<float>("wgth1",{32,4});
+    }
 }
 
 template<typename TF>
@@ -175,18 +179,8 @@ void load_gas_concs(Gas_concs<TF>& gas_concs, Netcdf_file& input_nc)
 
     gas_concs.set_vmr("h2o",
             Array<TF,1>(rad_nc.get_variable<TF>("h2o", {n_lay}), {n_lay}));
-//    gas_concs.set_vmr("co2",
-//            rad_nc.get_variable<TF>("co2"));
     gas_concs.set_vmr("o3",
             Array<TF,1>(rad_nc.get_variable<TF>("o3", {n_lay}), {n_lay}));
-//    gas_concs.set_vmr("n2o",
-//            rad_nc.get_variable<TF>("n2o"));
-//    gas_concs.set_vmr("ch4",
-//            rad_nc.get_variable<TF>("ch4"));
-//    gas_concs.set_vmr("o2",
-//            rad_nc.get_variable<TF>("o2"));
-//    gas_concs.set_vmr("n2",
-//            rad_nc.get_variable<TF>("n2"));
 }
 
 template<typename TF>
@@ -194,6 +188,15 @@ void solve_radiation(Master& master)
 {
     // We are doing a single column run.
     const int n_col = 1;
+    constexpr int N_layI=4;
+    constexpr int N_layIp=6;
+    constexpr int N_lay1=64;
+    constexpr int N_lay2=64;
+    constexpr int N_layOlw=256;
+    constexpr int N_layOlwp=768;
+    constexpr int N_layOsw=224;
+    Netcdf_file NcFile(master, "wgth.nc", Netcdf_mode::Read);
+
 
     // These are the global variables that need to be contained in a class.
     Gas_concs<TF> gas_concs;
@@ -257,11 +260,54 @@ void solve_radiation(Master& master)
            idx_tropo += 1;
        }
     }
-    Network TLW(idx_tropo,
-                "bias1_tlw_lower.txt","bias2_tlw_lower.txt","bias3_tlw_lower.txt","bias4_tlw_lower.txt",
-                "wgth1_tlw_lower.txt","wgth2_tlw_lower.txt","wgth3_tlw_lower.txt","wgth4_tlw_lower.txt",
-                "mean_in_tlw_lower.txt","stdv_in_tlw_lower.txt",
-                "mean_out_tlw_lower.txt","stdv_out_tlw_lower.txt",256);
+    int idxupper = n_lay-idx_tropo;
+    Netcdf_group tlwnc = NcFile.get_group("TauLW");
+    Network TLW(idx_tropo,idxupper,
+                tlwnc.get_variable<float>("bias1_lower",{N_lay1}),
+                tlwnc.get_variable<float>("bias2_lower",{N_lay2}),
+                tlwnc.get_variable<float>("bias3_lower",{N_layOlw}),
+                tlwnc.get_variable<float>("wgth1_lower",{N_lay1,  N_layI}),
+                tlwnc.get_variable<float>("wgth2_lower",{N_lay2,  N_lay1}),
+                tlwnc.get_variable<float>("wgth3_lower",{N_layOlw,N_lay2}),
+                tlwnc.get_variable<float>("Fmean_lower",{N_layI}),
+                tlwnc.get_variable<float>("Fstdv_lower",{N_layI}),
+                tlwnc.get_variable<float>("Lmean_lower",{N_layOlw}),
+                tlwnc.get_variable<float>("Lstdv_lower",{N_layOlw}),
+                tlwnc.get_variable<float>("bias1_upper",{N_lay1}),
+                tlwnc.get_variable<float>("bias2_upper",{N_lay2}),
+                tlwnc.get_variable<float>("bias3_upper",{N_layOlw}),
+                tlwnc.get_variable<float>("wgth1_upper",{N_lay1,  N_layI}),
+                tlwnc.get_variable<float>("wgth2_upper",{N_lay2,  N_lay1}),
+                tlwnc.get_variable<float>("wgth3_upper",{N_layOlw,N_lay2}),
+                tlwnc.get_variable<float>("Fmean_upper",{N_layI}),
+                tlwnc.get_variable<float>("Fstdv_upper",{N_layI}),
+                tlwnc.get_variable<float>("Lmean_upper",{N_layOlw}),
+                tlwnc.get_variable<float>("Lstdv_upper",{N_layOlw}),
+                N_layOlw,N_layI);
+
+    Netcdf_group plnck = NcFile.get_group("Planck3");
+    Network PLK(idx_tropo,idxupper,
+                plnck.get_variable<float>("bias1_lower",{N_lay1}),
+                plnck.get_variable<float>("bias2_lower",{N_lay2}),
+                plnck.get_variable<float>("bias3_lower",{N_layOlwp}),
+                plnck.get_variable<float>("wgth1_lower",{N_lay1,  N_layIp}),
+                plnck.get_variable<float>("wgth2_lower",{N_lay2,  N_lay1}),
+                plnck.get_variable<float>("wgth3_lower",{N_layOlwp,N_lay2}),
+                plnck.get_variable<float>("Fmean_lower",{N_layIp}),
+                plnck.get_variable<float>("Fstdv_lower",{N_layIp}),
+                plnck.get_variable<float>("Lmean_lower",{N_layOlwp}),
+                plnck.get_variable<float>("Lstdv_lower",{N_layOlwp}),
+                plnck.get_variable<float>("bias1_upper",{N_lay1}),
+                plnck.get_variable<float>("bias2_upper",{N_lay2}),
+                plnck.get_variable<float>("bias3_upper",{N_layOlwp}),
+                plnck.get_variable<float>("wgth1_upper",{N_lay1,  N_layIp}),
+                plnck.get_variable<float>("wgth2_upper",{N_lay2,  N_lay1}),
+                plnck.get_variable<float>("wgth3_upper",{N_layOlwp,N_lay2}),
+                plnck.get_variable<float>("Fmean_upper",{N_layIp}),
+                plnck.get_variable<float>("Fstdv_upper",{N_layIp}),
+                plnck.get_variable<float>("Lmean_upper",{N_layOlwp}),
+                plnck.get_variable<float>("Lstdv_upper",{N_layOlwp}),
+                N_layOlwp,N_layIp);
 
     // Solve the longwave first.
     std::unique_ptr<Optical_props_arry<TF>> optical_props_lw =
@@ -269,7 +315,7 @@ void solve_radiation(Master& master)
 
     Source_func_lw<TF> sources(n_col, n_lay, *kdist_lw);
     starttime=get_wall_time();
-    kdist_lw->gas_optics(TLW,
+    kdist_lw->gas_optics(TLW,PLK,
             p_lay,
             p_lev,
             t_lay,
@@ -281,7 +327,7 @@ void solve_radiation(Master& master)
     endtime = get_wall_time();
     std::cout<<"LONGWAVE "<<endtime-starttime<<std::endl;
     starttime=get_wall_time();
-    kdist_lw->gas_optics(TLW,
+    kdist_lw->gas_optics(TLW,PLK,
             p_lay,
             p_lev,
             t_lay,
@@ -292,8 +338,6 @@ void solve_radiation(Master& master)
             t_lev);
     endtime = get_wall_time();
     std::cout<<"LONGWAVE "<<endtime-starttime<<std::endl;
-
-
 
     std::unique_ptr<Fluxes_broadband<TF>> fluxes =
             std::make_unique<Fluxes_broadband<TF>>(n_col, n_lev);
@@ -333,29 +377,51 @@ void solve_radiation(Master& master)
     //Short waveeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
     const int n_gpt_sw = kdist_sw->get_ngpt();
     Array<TF,2> toa_src({n_col, n_gpt_sw});
-    Network SSA_upper(n_lay - idx_tropo,
-                "NNvals/bias1_ssa_upper.txt","NNvals/bias2_ssa_upper.txt","NNvals/bias3_ssa_upper.txt","NNvals/bias4_ssa_upper.txt",
-                "NNvals/wgth1_ssa_upper.txt","NNvals/wgth2_ssa_upper.txt","NNvals/wgth3_ssa_upper.txt","NNvals/wgth4_ssa_upper.txt",
-                "NNvals/mean_in_ssa_upper.txt","NNvals/stdv_in_ssa_upper.txt",
-                "NNvals/mean_out_ssa_upper.txt","NNvals/stdv_out_ssa_upper.txt",224);
-    Network SSA_lower(idx_tropo,
-                "NNvals/bias1_ssa_lower.txt","NNvals/bias2_ssa_lower.txt","NNvals/bias3_ssa_lower.txt","NNvals/bias4_ssa_lower.txt",
-                "NNvals/wgth1_ssa_lower.txt","NNvals/wgth2_ssa_lower.txt","NNvals/wgth3_ssa_lower.txt","NNvals/wgth4_ssa_lower.txt",
-                "NNvals/mean_in_ssa_lower.txt","NNvals/stdv_in_ssa_lower.txt",
-                "NNvals/mean_out_ssa_lower.txt","NNvals/stdv_out_ssa_lower.txt",224);
-    Network TSW_upper(n_lay - idx_tropo,
-                "NNvals/bias1_tsw_upper.txt","NNvals/bias2_tsw_upper.txt","NNvals/bias3_tsw_upper.txt","NNvals/bias4_tsw_upper.txt",
-                "NNvals/wgth1_tsw_upper.txt","NNvals/wgth2_tsw_upper.txt","NNvals/wgth3_tsw_upper.txt","NNvals/wgth4_tsw_upper.txt",
-                "NNvals/mean_in_tsw_upper.txt","NNvals/stdv_in_tsw_upper.txt",
-                "NNvals/mean_out_tsw_upper.txt","NNvals/stdv_out_tsw_upper.txt",224);   
-    Network TSW_lower(idx_tropo,
-                "NNvals/bias1_tsw_lower.txt","NNvals/bias2_tsw_lower.txt","NNvals/bias3_tsw_lower.txt","NNvals/bias4_tsw_lower.txt",
-                "NNvals/wgth1_tsw_lower.txt","NNvals/wgth2_tsw_lower.txt","NNvals/wgth3_tsw_lower.txt","NNvals/wgth4_tsw_lower.txt",
-                "NNvals/mean_in_tsw_lower.txt","NNvals/stdv_in_tsw_lower.txt",
-                "NNvals/mean_out_tsw_lower.txt","NNvals/stdv_out_tsw_lower.txt",224);
+    Network SSA(idx_tropo,idxupper,
+                tlwnc.get_variable<float>("bias1_lower",{N_lay1}),
+                tlwnc.get_variable<float>("bias2_lower",{N_lay2}),
+                tlwnc.get_variable<float>("bias3_lower",{N_layOlw}),
+                tlwnc.get_variable<float>("wgth1_lower",{N_lay1,  N_layI}),
+                tlwnc.get_variable<float>("wgth2_lower",{N_lay2,  N_lay1}),
+                tlwnc.get_variable<float>("wgth3_lower",{N_layOlw,N_lay2}),
+                tlwnc.get_variable<float>("Fmean_lower",{N_layI}),
+                tlwnc.get_variable<float>("Fstdv_lower",{N_layI}),
+                tlwnc.get_variable<float>("Lmean_lower",{N_layOlw}),
+                tlwnc.get_variable<float>("Lstdv_lower",{N_layOlw}),
+                tlwnc.get_variable<float>("bias1_upper",{N_lay1}),
+                tlwnc.get_variable<float>("bias2_upper",{N_lay2}),
+                tlwnc.get_variable<float>("bias3_upper",{N_layOlw}),
+                tlwnc.get_variable<float>("wgth1_upper",{N_lay1,  N_layI}),
+                tlwnc.get_variable<float>("wgth2_upper",{N_lay2,  N_lay1}),
+                tlwnc.get_variable<float>("wgth3_upper",{N_layOlw,N_lay2}),
+                tlwnc.get_variable<float>("Fmean_upper",{N_layI}),
+                tlwnc.get_variable<float>("Fstdv_upper",{N_layI}),
+                tlwnc.get_variable<float>("Lmean_upper",{N_layOlw}),
+                tlwnc.get_variable<float>("Lstdv_upper",{N_layOlw}),
+                N_layOlw,N_layI);
 
-
-
+    Network TSW(idx_tropo,idxupper,
+                tlwnc.get_variable<float>("bias1_lower",{N_lay1}),
+                tlwnc.get_variable<float>("bias2_lower",{N_lay2}),
+                tlwnc.get_variable<float>("bias3_lower",{N_layOlw}),
+                tlwnc.get_variable<float>("wgth1_lower",{N_lay1,  N_layI}),
+                tlwnc.get_variable<float>("wgth2_lower",{N_lay2,  N_lay1}),
+                tlwnc.get_variable<float>("wgth3_lower",{N_layOlw,N_lay2}),
+                tlwnc.get_variable<float>("Fmean_lower",{N_layI}),
+                tlwnc.get_variable<float>("Fstdv_lower",{N_layI}),
+                tlwnc.get_variable<float>("Lmean_lower",{N_layOlw}),
+                tlwnc.get_variable<float>("Lstdv_lower",{N_layOlw}),
+                tlwnc.get_variable<float>("bias1_upper",{N_lay1}),
+                tlwnc.get_variable<float>("bias2_upper",{N_lay2}),
+                tlwnc.get_variable<float>("bias3_upper",{N_layOlw}),
+                tlwnc.get_variable<float>("wgth1_upper",{N_lay1,  N_layI}),
+                tlwnc.get_variable<float>("wgth2_upper",{N_lay2,  N_lay1}),
+                tlwnc.get_variable<float>("wgth3_upper",{N_layOlw,N_lay2}),
+                tlwnc.get_variable<float>("Fmean_upper",{N_layI}),
+                tlwnc.get_variable<float>("Fstdv_upper",{N_layI}),
+                tlwnc.get_variable<float>("Lmean_upper",{N_layOlw}),
+                tlwnc.get_variable<float>("Lstdv_upper",{N_layOlw}),
+                N_layOlw,N_layI);
 
     std::unique_ptr<Optical_props_arry<TF>> optical_props_sw =
             std::make_unique<Optical_props_2str<TF>>(n_col, n_lay, *kdist_sw);
@@ -367,10 +433,8 @@ void solve_radiation(Master& master)
             gas_concs,
             optical_props_sw,
             toa_src,
-            SSA_upper,
-            SSA_lower,
-            TSW_upper,
-            TSW_lower );
+            SSA,
+            TSW);
     endtime = get_wall_time();
     std::cout<<"shortwave: "<<endtime-starttime<<std::endl;
 

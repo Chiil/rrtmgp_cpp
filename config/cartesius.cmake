@@ -20,8 +20,8 @@ if(USEMPI)
   set(ENV{CC}  mpiicc ) # C compiler for parallel build
   set(ENV{CXX} mpiicpc) # C++ compiler for parallel build
 else()
-  set(ENV{CC}  icc ) # C compiler for parallel build
-  set(ENV{CXX} icpc) # C++ compiler for serial build
+  set(ENV{CC}  mpiicc ) # C compiler for parallel build
+  set(ENV{CXX} mpiicpc)# C++ compiler for serial build
 endif()
 
 if(USECUDA)
@@ -30,14 +30,14 @@ if(USECUDA)
 endif()
 
 if(WITH_TENSORRT)
-    set(TensorRT_LIB "libnvinfer.so")
-    set(USER_CXX_FLAGS " -std=c++17 -lcuda -lcudart")
+#    set(TensorRT_LIB "libnvinfer.so")
+    set(USER_CXX_FLAGS " -std=c++14")# -lcuda -lcudart" )
 else()
-    set(USER_CXX_FLAGS " -std=c++17")
+    set(USER_CXX_FLAGS " -std=c++14")
 endif(WITH_TENSORRT)
 
-set(USER_CXX_FLAGS_RELEASE "-Ofast -march=native")
-set(USER_CXX_FLAGS_DEBUG "-O0 -g -Wall -Wno-unknown-pragmas")
+set(USER_CXX_FLAGS_RELEASE "-Ofast -march=native -lblas -L /hpc/eb/Debian9/imkl/2017.3.196-iimpi-2017b/mkl/include")#-fno-wrapv")# -lblas -L /hpc/eb/Debian9/OpenBLAS/0.2.20-GCC-6.4.0-2.28/lib ")
+set(USER_CXX_FLAGS_DEBUG "-O0 -g -pg -Wall -Wno-unknown-pragmas")
 
 #set(FFTW_INCLUDE_DIR "/home/bstratum/tools/fftw3_linked/include")
 #set(FFTW_LIB         "/home/bstratum/tools/fftw3_linked/lib/libfftw3.a")

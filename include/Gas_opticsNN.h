@@ -4,11 +4,8 @@
 #include <string>
 #include "Array.h"
 #include <iostream>
-#include <common.h>
-#include <argsParser.h>
-#include <buffers.h>
-#include <NvInfer.h>
-#include <cuda_runtime_api.h>
+//#include <argsParser.h>
+//#include <buffers.h>
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -43,7 +40,7 @@ class Gas_opticsNN : public Optical_props<TF>
                 const bool do_taussa);
 
         // Longwave variant.
-        void gas_optics(Network& TLW,
+        void gas_optics(Network& TLW,Network& PLK,
                 const Array<TF,2>& play,
                 const Array<TF,2>& plev,
                 const Array<TF,2>& tlay,
@@ -61,10 +58,8 @@ class Gas_opticsNN : public Optical_props<TF>
                 const Gas_concs<TF>& gas_desc,
                 std::unique_ptr<Optical_props_arry<TF>>& optical_props,
                 Array<TF,2>& toa_src,
-                Network& SSA_upper,
-                Network& SSA_lower,
-                Network& TSW_upper,
-                Network& TSW_lower) const;
+                Network& SSA,
+                Network& TSW) const;
 
     private:
         const TF press_ref_trop = 9948.431564193395; //network is trained on this, so might as well hardcode it
@@ -72,23 +67,9 @@ class Gas_opticsNN : public Optical_props<TF>
         bool do_taussa;
         Array<std::string,1> gas_names;
         Array<TF,1> solar_src;
-        IExecutionContext* context_lower_tau;
-        IExecutionContext* context_upper_tau;
-        IExecutionContext* context_lower_ssa;
-        IExecutionContext* context_upper_ssa;
-        IExecutionContext* context_lower_plk;
-        IExecutionContext* context_upper_plk;
-        IExecutionContext* context_lower_ray;
-        IExecutionContext* context_upper_ray;
-        IExecutionContext* context_lower_abs;
-        IExecutionContext* context_upper_abs;
-
-        void init_TRT_engines(
-                const Array<std::string,1> & plan_files);
-
         void compute_tau_ssa_NN(
-                Network& SSA_upper,Network& SSA_lower,
-                Network& TSW_upper,Network& TSW_lower,
+                Network& SSA,
+                Network& TSW,
                 const int ncol, const int nlay, const int ngpt, const int nband,
                 const Array<TF,2>& play,
 
@@ -97,7 +78,7 @@ class Gas_opticsNN : public Optical_props<TF>
                 const Gas_concs<TF>& gas_desc,
                 std::unique_ptr<Optical_props_arry<TF>>& optical_props) const;
 
-        void compute_tau_sources_NN(Network& TLW,
+        void compute_tau_sources_NN(Network& TLW,Network& PLK,
                 const int ncol, const int nlay, const int nband, const int ngpt,
                 const Array<TF,2>& play, 
                 const Array<TF,2>& plev,
@@ -106,14 +87,6 @@ class Gas_opticsNN : public Optical_props<TF>
                 const Gas_concs<TF>& gas_desc,
                 Source_func_lw<TF>& sources,
                 std::unique_ptr<Optical_props_arry<TF>>& optical_props) const;
-
-        void inference(
-                IExecutionContext& context, 
-                float * input, 
-                float * output,
-                const int & batchSize,
-                const int & Nin,
-                const int & Nout) const;
 
         void lay2sfc_factor(
                 const Array<TF,2>& tlay,

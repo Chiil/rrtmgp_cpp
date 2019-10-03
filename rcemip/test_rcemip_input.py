@@ -7,7 +7,7 @@ nc_file = nc.Dataset("test_rcemip_input.nc", mode="w", datamodel="NETCDF4", clob
 
 # Radiation profiles.
 z_top = 100.e3
-dz = 500.
+dz = 2.
 z  = np.arange(dz/2, z_top, dz)
 zh = np.arange(   0, z_top-dz/2, dz)
 zh = np.append(zh, z_top)
@@ -61,7 +61,9 @@ g1 = 3.6478
 g2 = 0.83209
 g3 = 11.3515
 p_hpa = p_lay/100.
-o3 = g1 * p_hpa**g2 * np.exp(-p_hpa/g3) * 1e-6
+o3 = np.maximum(1e-20,g1 * p_hpa**g2 * np.exp(-p_hpa/g3) * 1e-6)
+print(np.max(o3))
+#o3 = np.minimum(1.4e-5,np.maximum(8.6e-9,g1 * p_hpa**g2 * np.exp(-p_hpa/g3) * 1e-6))
 
 nc_group_rad = nc_file.createGroup("radiation")
 

@@ -1,6 +1,6 @@
 #include <cmath>
 #include <numeric>
-//#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string.hpp>
 #include "Gas_concs.h"
 #include "Gas_opticsNN.h"
 #include "Array.h"
@@ -12,7 +12,6 @@
 
 //#define restrict __restrict__
 
-static Logger gLogger;
 static const int Ninput = 4;     // number of input columns (water vapour, ozone, pressure, temperature)
 static const int Ninput2 = Ninput + 2;
 
@@ -31,52 +30,16 @@ namespace
 {
     double starttime,endtime;
     double starttimeX,endtimeX;
-
-    ICudaEngine* makecudaengine(std::string eng_name)
+    inline float mylog(float x)
     {
-        //Read Engine from file
-        std::stringstream ModelStream;
-        ModelStream.seekg(0, ModelStream.beg);
-        std::ifstream cache(eng_name);
-        ModelStream << cache.rdbuf();
-        cache.close();
-        //Obtain size and memory usage of engine
-        ModelStream.seekg(0, std::ios::end);
-        const int modelSize = ModelStream.tellg();
-        ModelStream.seekg(0, std::ios::beg);
-        void* modelMem = malloc(modelSize);
-        ModelStream.read((char*)modelMem, modelSize);
-        //Deserialize engine
-        IRuntime* runtime = createInferRuntime(gLogger);
-        //Return deserialized engine
-        return runtime->deserializeCudaEngine(modelMem,modelSize,NULL);
-    } 
-}
+        x = sqrt(x);x = sqrt(x);
+        x = sqrt(x);x = sqrt(x);
+        x = (x-1.0f) * 16.0f;
+        return x;
+    }
 
-//     // IMPLEMENTATION OF CLASS FUNCTIONS.
-//     // TensorRT inference function
-template<typename TF>
-void Gas_opticsNN<TF>::inference(IExecutionContext& context, 
-        float * input, 
-        float * output, 
-        const int & batchSize,
-        const int & Nin,
-        const int & Nout) const
-{
-    const ICudaEngine& engine = context.getEngine();
-    void* buffers[2];
-    int inputIndex = engine.getBindingIndex("TensorRTInputPH_0");
-    int outputIndex = engine.getBindingIndex("TensorRTOutputPH_0");
-    cudaMalloc(&buffers[inputIndex], batchSize * Nin * sizeof(float));   // data
-    cudaMalloc(&buffers[outputIndex], batchSize * Nout * sizeof(float));   // data
-    cudaStream_t stream;
-    cudaStreamCreate(&stream);
-    cudaMemcpyAsync(buffers[inputIndex], input, batchSize * Nin * sizeof(float), cudaMemcpyHostToDevice, stream);
-    context.enqueue(batchSize, buffers, stream, nullptr);
-    cudaMemcpyAsync(output, buffers[outputIndex], batchSize * Nout * sizeof(float), cudaMemcpyDeviceToHost, stream);
-cudaDeviceSynchronize();
-}
 
+}
        
 //     // Constructor of longwave variant.
 template<typename TF>
@@ -89,8 +52,6 @@ Gas_opticsNN<TF>::Gas_opticsNN(
 {
     this->is_longwave = true;
     this->gas_names = gas_names;
-    init_TRT_engines(plan_files);
-    init_TRT_engines(plan_files);
 }
 
 // Constructor of the shortwave variant.
@@ -109,64 +70,11 @@ Gas_opticsNN<TF>::Gas_opticsNN(
     this->is_longwave = false;   
     this->do_taussa = do_taussa;
     this->gas_names = gas_names;
-    init_TRT_engines(plan_files);          
-}
-
-template<typename TF>
-void Gas_opticsNN<TF>::init_TRT_engines(
-        const Array<std::string,1> & plan_files)
-{
-    if (this->is_longwave)
-    {
-        ICudaEngine* engine_lower_tau = makecudaengine(plan_files({1}));
-        this->context_lower_tau = engine_lower_tau->createExecutionContext();
-    
-        ICudaEngine* engine_upper_tau = makecudaengine(plan_files({2}));
-        this->context_upper_tau = engine_upper_tau->createExecutionContext();
-
-        ICudaEngine* engine_lower_planck = makecudaengine(plan_files({3}));
-        this->context_lower_plk = engine_lower_planck->createExecutionContext();
-
-        ICudaEngine* engine_upper_planck = makecudaengine(plan_files({4}));
-        this->context_upper_plk = engine_upper_planck->createExecutionContext();
-    } 
-    else
-    {
-        if(this->do_taussa)
-        {   
-
-            ICudaEngine* engine_lower_tau = makecudaengine(plan_files({1}));
-            this->context_lower_tau = engine_lower_tau->createExecutionContext();
-
-            ICudaEngine* engine_upper_tau = makecudaengine(plan_files({2}));
-            this->context_upper_tau = engine_upper_tau->createExecutionContext();
-
-            ICudaEngine* engine_lower_ssa = makecudaengine(plan_files({3}));
-            this->context_lower_ssa = engine_lower_ssa->createExecutionContext();
-    
-            ICudaEngine* engine_upper_ssa = makecudaengine(plan_files({4}));
-            this->context_upper_ssa = engine_upper_ssa->createExecutionContext();
-        }
-        else
-        {    
-            ICudaEngine* engine_lower_ray = makecudaengine(plan_files({1}));
-            this->context_lower_ray = engine_lower_ray->createExecutionContext();
-
-            ICudaEngine* engine_upper_ray = makecudaengine(plan_files({2}));
-            this->context_upper_ray = engine_upper_ray->createExecutionContext();
-
-            ICudaEngine* engine_lower_abs = makecudaengine(plan_files({3}));
-            this->context_lower_abs = engine_lower_abs->createExecutionContext();
-
-            ICudaEngine* engine_upper_abs = makecudaengine(plan_files({4}));
-            this->context_upper_abs = engine_upper_abs->createExecutionContext();
-        }
-    }        
 }
 
 // Gas optics solver longwave variant.
 template<typename TF>
-void Gas_opticsNN<TF>::gas_optics(Network& TLW,
+void Gas_opticsNN<TF>::gas_optics(Network& TLW,Network& PLK,
         const Array<TF,2>& play,
         const Array<TF,2>& plev,
         const Array<TF,2>& tlay,
@@ -181,7 +89,7 @@ void Gas_opticsNN<TF>::gas_optics(Network& TLW,
     const int ngpt = this->get_ngpt();
     const int nband = this->get_nband();
 
-    compute_tau_sources_NN(TLW,
+    compute_tau_sources_NN(TLW, PLK,
             ncol, nlay, ngpt, nband,
             play, plev, tlay, tlev,
             gas_desc, sources, 
@@ -200,10 +108,8 @@ void Gas_opticsNN<TF>::gas_optics(
         const Gas_concs<TF>& gas_desc,
         std::unique_ptr<Optical_props_arry<TF>>& optical_props,
         Array<TF,2>& toa_src,
-        Network& SSA_upper,
-        Network& SSA_lower,
-        Network& TSW_upper,
-        Network& TSW_lower) const
+        Network& SSA,
+        Network& TSW) const
 
 {   
     const int ncol = play.dim(1);
@@ -211,8 +117,7 @@ void Gas_opticsNN<TF>::gas_optics(
     const int ngpt = this->get_ngpt();
     const int nband = this->get_nband();
     compute_tau_ssa_NN(
-            SSA_upper,SSA_lower,
-            TSW_upper,TSW_lower,
+            SSA,TSW,
             ncol, nlay, ngpt, nband,
             play, plev, tlay, gas_desc,
             optical_props);
@@ -267,8 +172,7 @@ void Gas_opticsNN<TF>::lay2sfc_factor(
 //Currently only implemented for atmospheric profilfes ordered bottom-first
 template<typename TF>
 void Gas_opticsNN<TF>::compute_tau_ssa_NN(
-        Network& SSA_upper, Network& SSA_lower,
-        Network& TSW_upper, Network& TSW_lower,
+        Network& SSA, Network& TSW,
         const int ncol, const int nlay, const int ngpt, const int nband,
         const Array<TF,2>& play,
         const Array<TF,2>& plev,
@@ -321,8 +225,6 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
         float output_lower_ssa[idx_tropo*ngpt];
         //TSW_lower.Inference(input_lower,output_lower_tau);
         //SSA_lower.Inference(input_lower,output_lower_ssa);
-        inference(*this->context_lower_tau, input_lower, output_lower_tau, idx_tropo, Ninput, ngpt);
-        inference(*this->context_lower_ssa, input_lower, output_lower_ssa, idx_tropo, Ninput, ngpt);
         for (int icol=1; icol<=ncol; ++icol)
              for (int ilay=1; ilay<=idx_tropo; ++ilay)
                 {
@@ -339,8 +241,6 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
     {
         float output_lower_abs[idx_tropo*ngpt];
         float output_lower_ray[idx_tropo*ngpt];       
-        inference(*this->context_lower_abs, input_lower, output_lower_abs, idx_tropo, Ninput, ngpt);
-        inference(*this->context_lower_ray, input_lower, output_lower_ray, idx_tropo, Ninput, ngpt);
         for (int icol=1; icol<=ncol; ++icol)
              for (int ilay=1; ilay<=idx_tropo; ++ilay)
                 {
@@ -359,9 +259,9 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
     float input_upper[(batchSize - idx_tropo)*Ninput];
     for (int i = idx_tropo; i < batchSize; i++)
     {
-        input_upper[Ninput*(i-idx_tropo)+0] = log(h2o({1,i+1}));
-        input_upper[Ninput*(i-idx_tropo)+1] = log(o3({1,i+1}));
-        input_upper[Ninput*(i-idx_tropo)+2] = log(play({1,i+1}));
+        input_upper[Ninput*(i-idx_tropo)+0] = mylog(h2o({1,i+1}));
+        input_upper[Ninput*(i-idx_tropo)+1] = mylog(o3({1,i+1}));
+        input_upper[Ninput*(i-idx_tropo)+2] = mylog(play({1,i+1}));
         input_upper[Ninput*(i-idx_tropo)+3] = tlay({1,i+1});
     }
 
@@ -372,8 +272,6 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
         float output_upper_ssa[(batchSize - idx_tropo)*ngpt];
         //TSW_upper.Inference(input_upper,output_upper_tau);
         //SSA_upper.Inference(input_upper,output_upper_ssa);
-        inference(*this->context_upper_tau, input_upper, output_upper_tau,batchSize -  idx_tropo, Ninput, ngpt);
-        inference(*this->context_upper_ssa, input_upper, output_upper_ssa,batchSize -  idx_tropo, Ninput, ngpt);
         for (int icol=1; icol<=ncol; ++icol)
             for (int ilay=idx_tropo+1; ilay<=batchSize; ++ilay)
                 {
@@ -390,11 +288,7 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
     {
         //do inference Optical Depth
         float output_upper_abs[(batchSize - idx_tropo)*ngpt];
-        float output_upper_ray[(batchSize - idx_tropo)*ngpt];
-    
-        inference(*this->context_upper_abs, input_upper, output_upper_abs,batchSize -  idx_tropo, Ninput, ngpt);
-        inference(*this->context_upper_ray, input_upper, output_upper_ray,batchSize -  idx_tropo, Ninput, ngpt);
-    
+        float output_upper_ray[(batchSize - idx_tropo)*ngpt];   
         for (int icol=1; icol<=ncol; ++icol)
             for (int ilay=idx_tropo+1; ilay<=batchSize; ++ilay)
                 {
@@ -415,7 +309,7 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
 //Neural Network optical property function for longwave
 //Currently only implemented for atmospheric profilfes ordered bottom-first
 template<typename TF>
-void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,
+void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
         const int ncol, const int nlay, const int ngpt, const int nband,
         const Array<TF,2>& play,
         const Array<TF,2>& plev,
@@ -425,6 +319,10 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,
         Source_func_lw<TF>& sources,
         std::unique_ptr<Optical_props_arry<TF>>& optical_props) const
 {
+    double* TAU = optical_props->get_tau().ptr();
+    double* src_LAYER = sources.get_lay_source().ptr();
+    double* src_LVINC = sources.get_lev_source_inc().ptr();
+    double* src_LVDEC = sources.get_lev_source_dec().ptr();
     Array<TF,3>& tau = optical_props->get_tau();
     Array<TF,3>& src_layer = sources.get_lay_source();
     Array<TF,3>& src_lvinc = sources.get_lev_source_inc();
@@ -453,34 +351,17 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,
     float input_lower_plk[idx_tropo*(Ninput+2)];
     float output_lower_tau[idx_tropo*ngpt];
     float output_lower_plk[idx_tropo*ngpt*3];
-////    for (int i = 0; i < idx_tropo; i++)
-////    {
-////        input_lower_tau[i*Ninput+0] = log(h2o({1,i+1}));
-////        input_lower_plk[i*(Ninput2)+0] = log(h2o({1,i+1}));
-////
-////        input_lower_tau[i*Ninput+1] = log(o3({1,i+1}));
-////        input_lower_plk[i*(Ninput2)+1] = log(o3({1,i+1}));
-////
-////        input_lower_tau[i*Ninput+2] = log(play({1,i+1}));
-////        input_lower_plk[i*(Ninput2)+2] = log(play({1,i+1}));
-////
-////        input_lower_tau[i*Ninput+3] = tlay({1,i+1});
-////        input_lower_plk[i*(Ninput2)+3] = tlay({1,i+1});
-////
-////        input_lower_plk[i*(Ninput2)+4] = tlev({1,i+1});
-////        input_lower_plk[i*(Ninput2)+5] = tlev({1,i+2});
-////    }
 
     for (int i = 0; i < idx_tropo; ++i)
     {
-        const float val = log(h2o({1,i+1}));
+        const float val = mylog(h2o({1,i+1}));
         input_lower_tau[i] = val;
         input_lower_plk[i] = val;
     }
     int startidx = idx_tropo * 1;
     for (int i = 0; i < idx_tropo; ++i)
     {
-        const float val = log(o3({1,i+1}));
+        const float val = mylog(o3({1,i+1}));
         const int idx   = startidx + i;
         input_lower_tau[idx] = val;
         input_lower_plk[idx] = val;
@@ -489,7 +370,7 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,
     startidx = idx_tropo * 2;
     for (int i = 0; i < idx_tropo; ++i)
     {
-        const float val = log(play({1,i+1}));
+        const float val = mylog(play({1,i+1}));
         const int idx   = startidx + i;
         input_lower_tau[idx] = val;
         input_lower_plk[idx] = val;
@@ -516,103 +397,148 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,
     input_lower_plk[idx_tropo * 6 - 1] = tlev({1,idx_tropo+1});
 
 
-
-
-
-    std::cout<<"inpvals: "<<input_lower_tau[0]<<" "<<input_lower_tau[idx_tropo*Ninput-1]<<std::endl;
-    std::cout<<"inpvals: "<<input_lower_plk[0]<<" "<<input_lower_plk[idx_tropo*(Ninput+2)-1]<<std::endl;
-
-
-
-    float dp[ncol][nlay];
+    float dp[ncol* nlay];
     for (int ilay=1; ilay<=nlay; ++ilay)
         for (int icol=1; icol<=ncol; ++icol)
         {
-           dp[icol-1][ilay-1] = abs(plev({icol,ilay})-plev({icol,ilay+1}));
+           const int dpidx = (icol-1)*nlay + (ilay-1);
+           dp[dpidx] = abs(plev({icol,ilay})-plev({icol,ilay+1}));
         }
     endtime = get_wall_time2();
     std::cout<<"input time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
     
-    //do inference Optical Depth
     starttime = get_wall_time2();
-
-////    inference(*this->context_lower_tau, input_lower_tau, output_lower_tau, idx_tropo, Ninput, ngpt);
-    TLW.Inference(input_lower_tau,output_lower_tau);
+    TLW.Inference(input_lower_tau, output_lower_tau, 1);
     endtime = get_wall_time2();
-
     std::cout<<"NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
 
+    starttime = get_wall_time2();
+    PLK.Inference(input_lower_plk, output_lower_plk, 1);
+    endtime = get_wall_time2();
+    std::cout<<"NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
 
     starttime=get_wall_time2()                                                                             ;
     for (int igpt=1; igpt<=ngpt; ++igpt)
-        for (int icol=1; icol<=ncol; ++icol)
-            for (int ilay=1; ilay<=idx_tropo; ++ilay)
-            {
-                const int idxlay1 = (ilay-1)+(icol-1)*idx_tropo+(igpt-1)*idx_tropo*ncol;
-                tau({icol, ilay, igpt}) = output_lower_tau[idxlay1] * dp[icol-1][ilay-1];
-            }
-    endtime = get_wall_time2();
-    std::cout<<"store_tau time: "<<endtime-starttime<<" "<<tau({2,2,2})<<std::endl;
-
-    
-    inference(*this->context_lower_plk, input_lower_plk, output_lower_plk, idx_tropo, Ninput+2, ngpt*3);
-    for (int icol=1; icol<=ncol; ++icol)
         for (int ilay=1; ilay<=idx_tropo; ++ilay)
+            for (int icol=1; icol<=ncol; ++icol)
             {
-                for (int igpt=1; igpt<=ngpt; ++igpt)
-                {
-                    const int idxlay2 = (igpt-1)+(ilay-1)*ngpt*3+(icol-1)*idx_tropo*ngpt*3;
-                    src_layer({icol, ilay, igpt}) = output_lower_plk[idxlay2];
-                    src_lvinc({icol, ilay, igpt}) = output_lower_plk[idxlay2+ngpt];
-                    src_lvdec({icol, ilay, igpt}) = output_lower_plk[idxlay2+ngpt*2];
-
-                }
+                const int idxlay = (icol-1) + (ilay-1)*ncol + (igpt-1)*idx_tropo*ncol;
+                const int dpidx = (icol-1)*nlay + (ilay-1);
+                tau({icol, ilay, igpt}) = output_lower_tau[idxlay] * dp[dpidx];
             }
+    std::cout<<"yeah "<<tau({1,1,1})<<" & "<<tau({1,3,6})<<std::endl;
+    for (int igpt=1; igpt<=ngpt; ++igpt)
+        for (int ilay=1; ilay<=idx_tropo; ++ilay)
+            for (int icol=1; icol<=ncol; ++icol)
+            {
+                const int idxlay  = (icol-1) + (ilay-1) * ncol; 
+                const int idxlay1 = idxlay + (igpt-1)          *idx_tropo * ncol;
+                const int idxlay2 = idxlay + (igpt-1+ngpt)     *idx_tropo * ncol;
+                const int idxlay3 = idxlay + (igpt-1+ngpt+ngpt)*idx_tropo * ncol;
+                src_layer({icol, ilay, igpt}) = output_lower_plk[idxlay1];
+                src_lvinc({icol, ilay, igpt}) = output_lower_plk[idxlay2];
+                src_lvdec({icol, ilay, igpt}) = output_lower_plk[idxlay3];
+            }
+            
 
-  
+    endtime = get_wall_time2();
+    std::cout<<"store time: "<<endtime-starttime<<" "<<tau({2,2,2})<<std::endl;
     //// Upper atmosphere:
     //fill input array
-    float input_upper_tau[(batchSize - idx_tropo)*Ninput];
-    float input_upper_plk[(batchSize - idx_tropo)*(Ninput+2)];
-    float output_upper_tau[(batchSize - idx_tropo)*ngpt];
-    float output_upper_plk[(batchSize - idx_tropo)*ngpt*3];   
-    for (int i = idx_tropo; i < batchSize; i++)
-    {
-        const int idx = i+1;
-        const int ix = i-idx_tropo;
-        input_upper_tau[Ninput*(ix)+0] = log(h2o({1,idx}));
-        input_upper_plk[(Ninput2)*(ix)+0] = log(h2o({1,idx}));
-
-        input_upper_tau[Ninput*(ix)+1] = log(o3({1,idx}));
-        input_upper_plk[(Ninput2)*(ix)+1] = log(o3({1,idx}));
-
-        input_upper_tau[Ninput*(ix)+2] = log(play({1,idx}));
-        input_upper_plk[(Ninput2)*(ix)+2] = log(play({1,idx}));
-
-        input_upper_tau[Ninput*(ix)+3] = tlay({1,idx});
-        input_upper_plk[(Ninput2)*(ix)+3] = tlay({1,idx});
-
-        input_upper_plk[(Ninput2)*(ix)+4] = tlev({1,idx});
-        input_upper_plk[(Ninput2)*(ix)+5] = tlev({1,idx+1});
-
-    }
+    const int Nlayupper = batchSize - idx_tropo;
+    float input_upper_tau[(Nlayupper)*Ninput];
+    float input_upper_plk[(Nlayupper)*(Ninput+2)];
+    float output_upper_tau[(Nlayupper)*ngpt];
+    float output_upper_plk[(Nlayupper)*ngpt*3];   
     //do inference Optical Depth
-    inference(*this->context_upper_tau, input_upper_tau, output_upper_tau,batchSize -  idx_tropo, Ninput, ngpt);
-    inference(*this->context_upper_plk, input_upper_plk, output_upper_plk,batchSize -  idx_tropo, Ninput+2, ngpt*3);
-    for (int icol=1; icol<=ncol; ++icol)
-        for (int ilay=idx_tropo+1; ilay<=batchSize; ++ilay)
+    for (int i = idx_tropo; i < batchSize; ++i)
+    {
+        const int ix = i - idx_tropo;
+        const float val = mylog(h2o({1,i+1}));
+        input_upper_tau[ix] = val;
+        input_upper_plk[ix] = val;
+    }
+
+    startidx = Nlayupper * 1;
+    for (int i = idx_tropo; i < batchSize; ++i)
+    {
+        const int idx = i - idx_tropo + startidx;
+        const float val = mylog(o3({1,i+1}));
+        input_upper_tau[i] = val;
+        input_upper_plk[i] = val;
+    }
+
+    startidx = Nlayupper * 2;
+    for (int i = idx_tropo; i < batchSize; ++i)
+    {
+        const float val = mylog(play({1,i+1}));
+        const int idx   = i - idx_tropo + startidx;
+        input_upper_tau[idx] = val;
+        input_upper_plk[idx] = val;
+    }
+
+    startidx = Nlayupper * 3;
+    for (int i = idx_tropo; i < batchSize; ++i)
+    {
+        const float val = tlay({1,i+1});
+        const int idx   = i - idx_tropo + startidx;
+        input_upper_tau[idx] = val;
+        input_upper_plk[idx] = val;
+    }
+
+    startidx = Nlayupper * 4;
+    input_upper_plk[startidx] = tlev({1,1+idx_tropo});
+    for (int i = idx_tropo; i < batchSize-1; ++i)
+    {
+        const float val = tlev({1,i+2});
+        const int idx = startidx+2*(i-idx_tropo);
+        input_upper_plk[idx + 1] = val;
+        input_upper_plk[idx + 2] = val;
+    }
+    input_upper_plk[Nlayupper * 6 - 1] = tlev({1,batchSize+1});
+
+    starttime = get_wall_time2();
+    TLW.Inference(input_upper_tau, output_upper_tau, 0);
+    endtime = get_wall_time2();
+    std::cout<<"Up_NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
+
+    starttime = get_wall_time2();
+    PLK.Inference(input_upper_plk, output_upper_plk, 0);
+    endtime = get_wall_time2();
+    std::cout<<"Up_NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
+
+    starttime = get_wall_time2();
+    for (int igpt=1; igpt<=ngpt; ++igpt)
+       for (int ilay=idx_tropo + 1; ilay<=batchSize; ++ilay)
+           for (int icol=1; icol<=ncol; ++icol)
+          {
+                const int idxlay = (icol-1) + (ilay-1-idx_tropo)*ncol + (igpt-1)*Nlayupper*ncol;
+                const int idxtau = (icol-1) + (ilay-1)*ncol + (igpt-1)*batchSize*ncol;
+                const int dpidx = (icol-1)*nlay + (ilay-1);
+                TAU[idxtau] = output_upper_tau[idxlay] * dp[dpidx]*2;
+            }
+    endtime = get_wall_time2();
+    std::cout<<"Up_NNoutputY time: "<<endtime-starttime<<" "<<tau({6,5000,1})<<" "<<TAU[5]<<std::endl;
+
+
+    starttime = get_wall_time2();
+    for (int igpt=1; igpt<=ngpt; ++igpt)
+        for (int ilay=idx_tropo+1;ilay<=batchSize; ++ilay)
+            for (int icol=1; icol<=ncol; ++icol)
             {
-                const float delta_p = dp[icol-1][ilay-1];
-                for (int igpt=1; igpt<=ngpt; ++igpt)
-                {
-                    const int idxlay1 = (igpt-1)+(ilay-1-idx_tropo)*ngpt+(icol-1)*(batchSize-idx_tropo)*ngpt;
-                    const int idxlay2 = (igpt-1)        +(ilay-1-idx_tropo)*ngpt*3+(icol-1)*(batchSize-idx_tropo)*ngpt*3;
-                    tau({icol, ilay, igpt}) = output_upper_tau[idxlay1] * delta_p;
-                    src_layer({icol, ilay, igpt}) = output_upper_plk[idxlay2];
-                    src_lvinc({icol, ilay, igpt}) = output_upper_plk[idxlay2+ngpt];
-                    src_lvdec({icol, ilay, igpt}) = output_upper_plk[idxlay2+ngpt*2];
-                }
-            } 
+                const int idxplk = (icol-1) + (ilay-1)*ncol + (igpt-1)*batchSize*ncol;
+                const int idxlay  = (icol-1) + (ilay-1-idx_tropo) * ncol; 
+                const int idxlay1 = idxlay + (igpt-1)          *Nlayupper * ncol;
+                const int idxlay2 = idxlay + (igpt-1+ngpt)     *Nlayupper * ncol;
+                const int idxlay3 = idxlay + (igpt-1+ngpt+ngpt)*Nlayupper * ncol;
+                src_LAYER[idxplk] = output_upper_plk[idxlay1];
+                src_LVINC[idxplk] = output_upper_plk[idxlay2];
+                src_LVDEC[idxplk] = output_upper_plk[idxlay3];
+            }
+    endtime = get_wall_time2();
+    std::cout<<"Up_NNoutput timeP2: "<<endtime-starttime<<" "<<src_layer({1,5000,1})<<std::endl;
+
+
 }
 
 

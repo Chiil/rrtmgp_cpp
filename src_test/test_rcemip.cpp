@@ -430,6 +430,19 @@ void solve_radiation(Master& master)
     endtime = get_wall_time();
     std::cout<<"longwave: "<<endtime-starttime<<std::endl;
 
+    starttime = get_wall_time();
+    kdist_lw->gas_optics(
+            p_lay,
+            p_lev,
+            t_lay,
+            t_sfc,
+            gas_concs,
+            optical_props_lw,
+            sources,
+            col_dry,
+            t_lev);
+    endtime = get_wall_time();
+    std::cout<<"longwave: "<<endtime-starttime<<std::endl;
 
     std::unique_ptr<Fluxes_broadband<TF>> fluxes =
             std::make_unique<Fluxes_broadband<TF>>(n_col, n_lev);
@@ -484,6 +497,17 @@ void solve_radiation(Master& master)
     endtime = get_wall_time();
     std::cout<<"shortwavee: "<<endtime-starttime<<std::endl;
 
+    starttime = get_wall_time();
+    kdist_sw->gas_optics(
+            p_lay,
+            p_lev,
+            t_lay,
+            gas_concs,
+            optical_props_sw,
+            toa_src,
+            col_dry);
+    endtime = get_wall_time();
+    std::cout<<"shortwavee: "<<endtime-starttime<<std::endl;
 
     const TF tsi_scaling = 0.4053176301654965;
     for (int igpt=1; igpt<=n_gpt_sw; ++igpt)
