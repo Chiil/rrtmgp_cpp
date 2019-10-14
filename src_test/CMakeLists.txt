@@ -52,7 +52,7 @@ else()
 
   add_executable(test_rcemipNN test_rcemipNN.cpp)
   target_link_libraries(test_rcemipNN rrtmgp ${LIBS} m)
-  add_executable(sampling sampling.cpp)
-  target_link_libraries(sampling rrtmgp ${LIBS} m)
+  #add_executable(sampling sampling.cpp)
+  #target_link_libraries(sampling rrtmgp ${LIBS} m)
 
 endif()

@@ -103,7 +103,7 @@ if(NOT HASCACHE)
     "Flags used by the C-compiler during release builds." FORCE)
   set(CMAKE_CXX_FLAGS ${USER_CXX_FLAGS} CACHE STRING
     "Flags used by the CXX-compiler during all build types." FORCE)
-  set(CMAKE_CXX_FLAGS_DEBUG ${USER_CXX_FLAGS_DEBUG} -pg -O0 CACHE STRING
+  set(CMAKE_CXX_FLAGS_DEBUG ${USER_CXX_FLAGS_DEBUG} CACHE STRING
     "Flags used by the CXX-compiler during debug builds." FORCE)
   set(CMAKE_CXX_FLAGS_RELEASE ${USER_CXX_FLAGS_RELEASE} CACHE STRING
     "Flags used by the CXX-compiler during release builds." FORCE)

@@ -7,7 +7,7 @@
 #include <vector>
 #include <iostream>
 #include <Network.h>
-#include <mkl_cblas.h>
+#include <mkl.h>
 #include <time.h>
 #include <sys/time.h>
 #define restrict __restrict__
@@ -34,10 +34,11 @@ namespace
 
     inline float leaky_relu(const float a) {return std::max(0.2f*a,a); }
 
-    inline void bias_and_activate(float* __restrict__ output, const float* __restrict__ bias, const int Nout, const int Nbatch)
+    inline void bias_and_activate(float* restrict output, const float* restrict bias, const int Nout, const int Nbatch)
     {
         for (int i = 0; i < Nout  ; ++i)
             {
+                #pragma ivdep
                 for (int j = 0; j < Nbatch; ++j)
                     output[j+i*Nbatch] = leaky_relu(output[j+i*Nbatch] + bias[i]);
             }
@@ -130,31 +131,30 @@ namespace
             const int N_layI)
     
     {  
-      std::cout<<"batch size: "<<Nbatch<<std::endl; 
-      //normalization and blas solver
-      for (int k=0; k<N_layI; ++k)
-      {
-          for (int i=0; i<Nbatch; ++i)
-          {
-              const int idxin = i + k * Nbatch;
-              input[idxin]=(input[idxin] - input_mean[k]) / input_stdev[k];
-          }   
-      }
-      matmul_bias_act_blas(Nbatch,N_lay1,N_layI,layer1_wgth,layer1_bias,input,layer1,0);
-      matmul_bias_act_blas(Nbatch,N_lay2,N_lay1,layer2_wgth,layer2_bias,layer1,layer2,0);
-      cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N_layO,Nbatch,N_lay2,1.,output_wgth,N_lay2,layer2,Nbatch,0.,output,Nbatch);
-      //output layer and denormalize
-      mystart = get_wall_time3();
-      for (int j=0; j<N_layO; ++j)
-      {
-          for (int i=0; i<Nbatch; ++i)
-          {
-              const int layidx = i + j * Nbatch;
-              output[layidx] = faster_but_inaccurate_exp(((output[layidx] +  output_bias[j]) * output_stdev[j]) + output_mean[j]) ;
-          }
-      }
-      myend = get_wall_time3();
-      std::cout<<"outlayertime: "<<myend-mystart<<std::endl;
+         //normalization and blas solver
+         for (int k=0; k<N_layI; ++k)
+         {
+             #pragma ivdep
+             for (int i=0; i<Nbatch; ++i)
+             {
+                 const int idxin = i + k * Nbatch;
+                 input[idxin]=(input[idxin] - input_mean[k]) / input_stdev[k];
+             }   
+         }
+    
+         matmul_bias_act_blas(Nbatch,N_lay1,N_layI,layer1_wgth,layer1_bias,input,layer1,0);
+         matmul_bias_act_blas(Nbatch,N_lay2,N_lay1,layer2_wgth,layer2_bias,layer1,layer2,0);
+         cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N_layO,Nbatch,N_lay2,1.,output_wgth,N_lay2,layer2,Nbatch,0.,output,Nbatch);
+         //output layer and denormalize
+         for (int j=0; j<N_layO; ++j)
+         {
+             #pragma ivdep
+             for (int i=0; i<Nbatch; ++i)
+             {
+                 const int layidx = i + j * Nbatch;
+                 output[layidx] = faster_but_inaccurate_exp(((output[layidx] +  output_bias[j]) * output_stdev[j]) + output_mean[j]) ;
+             }
+         }
     }
 }
 

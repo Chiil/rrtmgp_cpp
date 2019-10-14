@@ -10,7 +10,7 @@
 #include <time.h>
 #include <sys/time.h>
 
-//#define restrict __restrict__
+#define restrict __restrict__
 
 static const int Ninput = 4;     // number of input columns (water vapour, ozone, pressure, temperature)
 static const int Ninput2 = Ninput + 2;
@@ -37,7 +37,112 @@ namespace
         x = (x-1.0f) * 16.0f;
         return x;
     }
+ 
+    void copy_arrays(
+                 const float* restrict const data_in,
+                 const float* restrict const data_dp,
+                 double* restrict const data_out,
+                 const int N1,  const int N2a, 
+                 const int N2b, const int N3,
+                 const int nlay)
+    {
+        const int Nup = N2b-N2a;
+        for (int i = 0; i < N3; ++i)
+            for (int j = N2a; j < N2b; ++j)
+            {
+                #pragma ivdep
+                for (int k = 0; k < N1; ++k)
+                {
+                    const int idxlay = k + (j-N2a)*N1 + i * Nup * N1;
+                    const int idxout = k + j*N1 + i * N2b * N1;
+                    const int dpidx  = k + j*N1;
+                    data_out[idxout] = data_in[idxlay] * data_dp[dpidx];
 
+                }
+            }
+    }
+   
+    void copy_arrays2(
+                 const float* restrict const data_in,
+                 const float* restrict const data_dp,
+                 double* restrict const data_out,
+                 const int N1,  const int N2a, 
+                 const int N2b, const int N3,
+                 const int nlay)
+    {
+        const float* dp_temp = &data_dp[N1*N2a];
+        const int Nup = N2b-N2a;
+        for (int i = 0; i < N3; ++i)
+        {
+            const int outidx = i*nlay*N1+N2a*N1;
+            const float* in_temp = &data_in[i*Nup*N1];
+            double* out_temp = &data_out[outidx];
+            #pragma ivdep            
+            for (int j = 0; j < N1*Nup; ++j)
+            {
+                out_temp[j] = in_temp[j] * dp_temp[j]; 
+            }             
+
+
+        }
+    }
+    void copy_arrays_plk(
+                 const float* restrict const data_in,
+                 double* restrict const data_out1,
+                 double* restrict const data_out2,
+                 double* restrict const data_out3,
+                 const int N1,  const int N2a, 
+                 const int N2b, const int N3)
+    {
+        const int Nup = N2b-N2a;
+        for (int i = 0; i < N3; ++i)
+            for (int j = N2a; j < N2b; ++j)
+            {
+                #pragma ivdep
+                for (int k = 0; k < N1; ++k)
+                {
+                    const int idxout = k + j*N1 + i * N2b * N1;
+                    const int idxlay = k + (j-N2a)*N1;
+                    const int idxlay1 = idxlay + i * Nup * N1;
+                    const int idxlay2 = idxlay + (i+N3) * Nup * N1;
+                    const int idxlay3 = idxlay + (i+N3+N3) * Nup * N1;
+                    data_out1[idxout] = data_in[idxlay1];
+                    data_out2[idxout] = data_in[idxlay2];
+                    data_out3[idxout] = data_in[idxlay3];
+
+                }
+            }
+    }
+
+    void copy_arrays_plk2(
+                 const float* restrict const data_in,
+                 double* restrict const data_out1,
+                 double* restrict const data_out2,
+                 double* restrict const data_out3,
+                 const int N1,  const int N2a, 
+                 const int N2b, const int N3,
+                 const int nlay)
+    {
+        const int Nup = N2b-N2a;
+        for (int i = 0; i < N3; ++i)
+        {
+            const int outidx = i*nlay*N1+N2a*N1;
+            const float* in_temp1 = &data_in[i*Nup*N1];
+            const float* in_temp2 = &data_in[(i+N3)*Nup*N1];
+            const float* in_temp3 = &data_in[(i+N3+N3)*Nup*N1];
+            double* out_temp1= &data_out1[outidx];
+            double* out_temp2= &data_out2[outidx];
+            double* out_temp3= &data_out3[outidx];
+            #pragma ivdep           
+            for (int j = 0; j < N1*Nup; ++j)
+            {
+                out_temp1[j] = in_temp1[j];
+                out_temp2[j] = in_temp2[j];
+                out_temp3[j] = in_temp3[j];
+            
+            }
+        }
+    }
 
 }
        
@@ -195,7 +300,7 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
            idx_tropo += 1;
        }
     }
-
+    std::cout<<"idxtropo: "<<idx_tropo<<std::endl;
     float dp[ncol][nlay];
     for (int ilay=1; ilay<=nlay; ++ilay)
         for (int icol=1; icol<=ncol; ++icol)
@@ -340,13 +445,14 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
            idx_tropo += 1;
        }
     }
+    std::cout<<"idx_tropo: "<<idx_tropo<<std::endl;
     //get gas concentrations
     const Array<TF,2>& h2o = gas_desc.get_vmr(this->gas_names({1}));
     const Array<TF,2>& o3  = gas_desc.get_vmr(this->gas_names({3}));
 
     //// Lower atmosphere:
     //fill input array  
-    starttime = get_wall_time2();
+//    starttime = get_wall_time2();
     float input_lower_tau[idx_tropo*Ninput];
     float input_lower_plk[idx_tropo*(Ninput+2)];
     float output_lower_tau[idx_tropo*ngpt];
@@ -390,9 +496,13 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
     for (int i = 0; i < idx_tropo-1; ++i)
     {
         const float val = tlev({1,i+2});
-        const int idx = startidx+2*i;
-        input_lower_plk[idx + 1] = val;
-        input_lower_plk[idx + 2] = val;
+        const int idx1 = startidx+idx_tropo+i;
+        const int idx2 = startidx+i+1;
+        input_lower_plk[idx1] = val;
+        input_lower_plk[idx2] = val;
+       // const int idx = startidx+2*i;
+       // input_lower_plk[idx + 1] = val;
+       // input_lower_plk[idx + 2] = val;
     }
     input_lower_plk[idx_tropo * 6 - 1] = tlev({1,idx_tropo+1});
 
@@ -404,45 +514,54 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
            const int dpidx = (icol-1)*nlay + (ilay-1);
            dp[dpidx] = abs(plev({icol,ilay})-plev({icol,ilay+1}));
         }
-    endtime = get_wall_time2();
-    std::cout<<"input time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
+//    endtime = get_wall_time2();
+//    std::cout<<"input time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
     
-    starttime = get_wall_time2();
+//    starttime = get_wall_time2();
     TLW.Inference(input_lower_tau, output_lower_tau, 1);
-    endtime = get_wall_time2();
-    std::cout<<"NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
+//    endtime = get_wall_time2();
+//    std::cout<<"NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
 
-    starttime = get_wall_time2();
+//    starttime = get_wall_time2();
     PLK.Inference(input_lower_plk, output_lower_plk, 1);
-    endtime = get_wall_time2();
-    std::cout<<"NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
+//    endtime = get_wall_time2();
 
-    starttime=get_wall_time2()                                                                             ;
-    for (int igpt=1; igpt<=ngpt; ++igpt)
-        for (int ilay=1; ilay<=idx_tropo; ++ilay)
-            for (int icol=1; icol<=ncol; ++icol)
-            {
-                const int idxlay = (icol-1) + (ilay-1)*ncol + (igpt-1)*idx_tropo*ncol;
-                const int dpidx = (icol-1)*nlay + (ilay-1);
-                tau({icol, ilay, igpt}) = output_lower_tau[idxlay] * dp[dpidx];
-            }
-    std::cout<<"yeah "<<tau({1,1,1})<<" & "<<tau({1,3,6})<<std::endl;
-    for (int igpt=1; igpt<=ngpt; ++igpt)
-        for (int ilay=1; ilay<=idx_tropo; ++ilay)
-            for (int icol=1; icol<=ncol; ++icol)
-            {
-                const int idxlay  = (icol-1) + (ilay-1) * ncol; 
-                const int idxlay1 = idxlay + (igpt-1)          *idx_tropo * ncol;
-                const int idxlay2 = idxlay + (igpt-1+ngpt)     *idx_tropo * ncol;
-                const int idxlay3 = idxlay + (igpt-1+ngpt+ngpt)*idx_tropo * ncol;
-                src_layer({icol, ilay, igpt}) = output_lower_plk[idxlay1];
-                src_lvinc({icol, ilay, igpt}) = output_lower_plk[idxlay2];
-                src_lvdec({icol, ilay, igpt}) = output_lower_plk[idxlay3];
-            }
-            
+//    starttime=get_wall_time2();                                                                             ;
+//    for (int igpt=1; igpt<=ngpt; ++igpt)
+//        for (int ilay=1; ilay<=idx_tropo; ++ilay)
+//            for (int icol=1; icol<=ncol; ++icol)
+//            {
+//                const int idxlay = (icol-1) + (ilay-1)*ncol + (igpt-1)*idx_tropo*ncol;
+//                const int dpidx = (icol-1)*nlay + (ilay-1);
+//                tau({icol, ilay, igpt}) = output_lower_tau[idxlay] * dp[dpidx];
+//            }
+//
+//    endtime = get_wall_time2();
+ 
+//    starttime = get_wall_time2();
+    copy_arrays2(output_lower_tau,dp,TAU,ncol,0,idx_tropo,ngpt,nlay);
+//    endtime = get_wall_time2();
 
-    endtime = get_wall_time2();
-    std::cout<<"store time: "<<endtime-starttime<<" "<<tau({2,2,2})<<std::endl;
+//    starttime = get_wall_time2();
+//    for (int igpt=1; igpt<=ngpt; ++igpt)
+//        for (int ilay=1; ilay<=idx_tropo; ++ilay)
+//            for (int icol=1; icol<=ncol; ++icol)
+//            {
+//                const int idxlay  = (icol-1) + (ilay-1) * ncol; 
+//                const int idxlay1 = idxlay + (igpt-1)          *idx_tropo * ncol;
+//                const int idxlay2 = idxlay + (igpt-1+ngpt)     *idx_tropo * ncol;
+//                const int idxlay3 = idxlay + (igpt-1+ngpt+ngpt)*idx_tropo * ncol;
+//                src_layer({icol, ilay, igpt}) = output_lower_plk[idxlay1];
+//                src_lvinc({icol, ilay, igpt}) = output_lower_plk[idxlay2];
+//                src_lvdec({icol, ilay, igpt}) = output_lower_plk[idxlay3];
+//            }            
+//    endtime = get_wall_time2();
+//    std::cout<<"Qp_NNoutputPbad: "<<endtime-starttime<<" "<<src_layer({1,1200,1})<<"x"<<src_lvinc({66,666,1})<<std::endl;
+
+//    starttime = get_wall_time2();
+    copy_arrays_plk2(output_lower_plk,src_LAYER,src_LVINC,src_LVDEC,ncol,0,idx_tropo,ngpt,nlay);
+//    endtime = get_wall_time2();
+//    std::cout<<"Qp_NNoutputPgad: "<<endtime-starttime<<" "<<src_layer({1,1200,1})<<"x"<<src_lvinc({66,666,1})<<std::endl;
     //// Upper atmosphere:
     //fill input array
     const int Nlayupper = batchSize - idx_tropo;
@@ -464,8 +583,8 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
     {
         const int idx = i - idx_tropo + startidx;
         const float val = mylog(o3({1,i+1}));
-        input_upper_tau[i] = val;
-        input_upper_plk[i] = val;
+        input_upper_tau[idx] = val;
+        input_upper_plk[idx] = val;
     }
 
     startidx = Nlayupper * 2;
@@ -491,52 +610,92 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
     for (int i = idx_tropo; i < batchSize-1; ++i)
     {
         const float val = tlev({1,i+2});
-        const int idx = startidx+2*(i-idx_tropo);
-        input_upper_plk[idx + 1] = val;
-        input_upper_plk[idx + 2] = val;
+        const int idx1 = startidx+Nlayupper+(i-idx_tropo);
+        const int idx2 = startidx+1+(i-idx_tropo);
+        input_upper_plk[idx1] = val;
+        input_upper_plk[idx2] = val;
+
+        //const int idx = startidx+2*(i-idx_tropo);
+        //input_upper_plk[idx + 1] = val;
+        //input_upper_plk[idx + 2] = val;
     }
     input_upper_plk[Nlayupper * 6 - 1] = tlev({1,batchSize+1});
 
-    starttime = get_wall_time2();
+    //startidx = idx_tropo * 4;
+    //input_lower_plk[startidx] = tlev({1,1});
+    //for (int i = 0; i < idx_tropo-1; ++i)
+    //{
+    //    const float val = tlev({1,i+2});
+    //    const int idx1 = startidx+idx_tropo+i;
+    //    const int idx2 = startidx+i+1;
+    //    input_lower_plk[idx1] = val;
+    //    input_lower_plk[idx2] = val;
+    //   // const int idx = startidx+2*i;
+    //   // input_lower_plk[idx + 1] = val;
+    //   // input_lower_plk[idx + 2] = val;
+    //}
+    //input_lower_plk[idx_tropo * 6 - 1] = tlev({1,idx_tropo+1});
+
+//    starttime = get_wall_time2();
     TLW.Inference(input_upper_tau, output_upper_tau, 0);
-    endtime = get_wall_time2();
-    std::cout<<"Up_NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
+//    endtime = get_wall_time2();
+//    std::cout<<"Up_NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
 
-    starttime = get_wall_time2();
+//    starttime = get_wall_time2();
     PLK.Inference(input_upper_plk, output_upper_plk, 0);
-    endtime = get_wall_time2();
-    std::cout<<"Up_NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
+//    endtime = get_wall_time2();
+//    std::cout<<"Up_NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
 
-    starttime = get_wall_time2();
-    for (int igpt=1; igpt<=ngpt; ++igpt)
-       for (int ilay=idx_tropo + 1; ilay<=batchSize; ++ilay)
-           for (int icol=1; icol<=ncol; ++icol)
-          {
-                const int idxlay = (icol-1) + (ilay-1-idx_tropo)*ncol + (igpt-1)*Nlayupper*ncol;
-                const int idxtau = (icol-1) + (ilay-1)*ncol + (igpt-1)*batchSize*ncol;
-                const int dpidx = (icol-1)*nlay + (ilay-1);
-                TAU[idxtau] = output_upper_tau[idxlay] * dp[dpidx]*2;
-            }
-    endtime = get_wall_time2();
-    std::cout<<"Up_NNoutputY time: "<<endtime-starttime<<" "<<tau({6,5000,1})<<" "<<TAU[5]<<std::endl;
+//    starttime = get_wall_time2();
+//    for (int igpt=1; igpt<=ngpt; ++igpt)
+//       for (int ilay=idx_tropo + 1; ilay<=batchSize; ++ilay)
+//           for (int icol=1; icol<=ncol; ++icol)
+//          {
+//                const int idxlay = (icol-1) + (ilay-1-idx_tropo)*ncol + (igpt-1)*Nlayupper*ncol;
+//                const int idxtau = (icol-1) + (ilay-1)*ncol + (igpt-1)*batchSize*ncol;
+//                const int dpidx = (icol-1)*nlay + (ilay-1);
+//                TAU[idxtau] = output_upper_tau[idxlay] * dp[dpidx];
+//            }
+//    endtime = get_wall_time2();
+//    std::cout<<"Up_NNoutputTauBad time: "<<endtime-starttime<<" "<<tau({6,5000,1})<<" "<<tau({66,6666,1})<<std::endl;
+//
+//
+//    starttime = get_wall_time2();
+//    copy_arrays(output_upper_tau,dp,TAU,ncol,idx_tropo,batchSize,ngpt,nlay);
+//    endtime = get_wall_time2();
+//    std::cout<<"Up_NNoutputTauGod time: "<<endtime-starttime<<" "<<tau({6,5000,1})<<" "<<tau({66,6666,1})<<std::endl;
 
+//    starttime = get_wall_time2();
+    copy_arrays2(output_upper_tau,dp,TAU,ncol,idx_tropo,batchSize,ngpt,nlay);
+//    endtime = get_wall_time2();
+//    std::cout<<"Up_NNoutputTauGad time: "<<endtime-starttime<<" "<<tau({6,5000,1})<<" "<<tau({66,6666,1})<<std::endl;
+//
+//    starttime = get_wall_time2();
+//    for (int igpt=1; igpt<=ngpt; ++igpt)
+//        for (int ilay=idx_tropo+1;ilay<=batchSize; ++ilay)
+//            for (int icol=1; icol<=ncol; ++icol)
+//            {
+//                const int idxplk = (icol-1) + (ilay-1)*ncol + (igpt-1)*batchSize*ncol;
+//                const int idxlay  = (icol-1) + (ilay-1-idx_tropo) * ncol; 
+//                const int idxlay1 = idxlay + (igpt-1)          *Nlayupper * ncol;
+//                const int idxlay2 = idxlay + (igpt-1+ngpt)     *Nlayupper * ncol;
+//                const int idxlay3 = idxlay + (igpt-1+ngpt+ngpt)*Nlayupper * ncol;
+//                src_LAYER[idxplk] = output_upper_plk[idxlay1];
+//                src_LVINC[idxplk] = output_upper_plk[idxlay2];
+//                src_LVDEC[idxplk] = output_upper_plk[idxlay3];
+//            }
+//    endtime = get_wall_time2();
+//    std::cout<<"Up_NNoutputPbad: "<<endtime-starttime<<" "<<src_layer({1,5000,1})<<"x"<<src_lvinc({1,6666})<<std::endl;
+//    
+//    starttime = get_wall_time2();
+//    copy_arrays_plk(output_upper_plk,src_LAYER,src_LVINC,src_LVDEC,ncol,idx_tropo,batchSize,ngpt);
+//    endtime = get_wall_time2();
+//    std::cout<<"Up_NNoutputPgod: "<<endtime-starttime<<" "<<src_layer({1,5000,1})<<"x"<<src_lvinc({1,6666})<<std::endl;
 
-    starttime = get_wall_time2();
-    for (int igpt=1; igpt<=ngpt; ++igpt)
-        for (int ilay=idx_tropo+1;ilay<=batchSize; ++ilay)
-            for (int icol=1; icol<=ncol; ++icol)
-            {
-                const int idxplk = (icol-1) + (ilay-1)*ncol + (igpt-1)*batchSize*ncol;
-                const int idxlay  = (icol-1) + (ilay-1-idx_tropo) * ncol; 
-                const int idxlay1 = idxlay + (igpt-1)          *Nlayupper * ncol;
-                const int idxlay2 = idxlay + (igpt-1+ngpt)     *Nlayupper * ncol;
-                const int idxlay3 = idxlay + (igpt-1+ngpt+ngpt)*Nlayupper * ncol;
-                src_LAYER[idxplk] = output_upper_plk[idxlay1];
-                src_LVINC[idxplk] = output_upper_plk[idxlay2];
-                src_LVDEC[idxplk] = output_upper_plk[idxlay3];
-            }
-    endtime = get_wall_time2();
-    std::cout<<"Up_NNoutput timeP2: "<<endtime-starttime<<" "<<src_layer({1,5000,1})<<std::endl;
+//    starttime = get_wall_time2();
+    copy_arrays_plk2(output_upper_plk,src_LAYER,src_LVINC,src_LVDEC,ncol,idx_tropo,batchSize,ngpt,nlay);
+//    endtime = get_wall_time2();
+    //std::cout<<"Up_NNoutputPgad: "<<endtime-starttime<<" "<<src_layer({14,8888,1})<<"x"<<src_lvinc({1,8888})<<std::endl;
 
 
 }

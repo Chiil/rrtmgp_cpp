@@ -535,6 +535,20 @@ void solve_radiation(Master& master)
     nc_lw_gpt_flux_dn.insert(lw_gpt_flux_dn.v(),{0,0,0});
     auto nc_lw_gpt_flux_up = output_nc.add_variable<TF>("lw_gpt_flux_up" , {"gpt","lev", "col"});
     nc_lw_gpt_flux_up.insert(lw_gpt_flux_up.v(),{0,0,0});
+    
+    
+    Array<TF,3> myplk = sources.get_lay_source();
+    auto planckout = output_nc.add_variable<TF>("planck" , {"gpt","lay", "col"});
+    planckout.insert(myplk.v(),{0,0,0});
+    Array<TF,3> myplkI= sources.get_lev_source_inc();
+    auto planckoutI = output_nc.add_variable<TF>("planckI" , {"gpt","lev", "col"});
+    planckoutI.insert(myplkI.v(),{0,0,0});
+
+    Array<TF,3> myplkD = sources.get_lev_source_dec();
+    auto planckoutD = output_nc.add_variable<TF>("planckD" , {"gpt","lev", "col"});
+    planckoutD.insert(myplkD.v(),{0,0,0});
+
+
 }
 
 int main()
