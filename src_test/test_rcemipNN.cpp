@@ -195,7 +195,7 @@ void solve_radiation(Master& master)
     constexpr int N_layOlw=256;
     constexpr int N_layOlwp=768;
     constexpr int N_layOsw=224;
-    Netcdf_file NcFile(master, "wgth.nc", Netcdf_mode::Read);
+    Netcdf_file NcFile(master, "weights.nc", Netcdf_mode::Read);
 
 
     // These are the global variables that need to be contained in a class.
@@ -284,8 +284,8 @@ void solve_radiation(Master& master)
                 tlwnc.get_variable<float>("Lmean_upper",{N_layOlw}),
                 tlwnc.get_variable<float>("Lstdv_upper",{N_layOlw}),
                 N_layOlw,N_layI);
-
-    Netcdf_group plnck = NcFile.get_group("Planck3");
+    
+    Netcdf_group plnck = NcFile.get_group("Planck");
     Network PLK(idx_tropo,idxupper,
                 plnck.get_variable<float>("bias1_lower",{N_lay1}),
                 plnck.get_variable<float>("bias2_lower",{N_lay2}),
@@ -377,52 +377,55 @@ void solve_radiation(Master& master)
     //Short waveeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
     const int n_gpt_sw = kdist_sw->get_ngpt();
     Array<TF,2> toa_src({n_col, n_gpt_sw});
+    Netcdf_group ssanc = NcFile.get_group("SSA");
     Network SSA(idx_tropo,idxupper,
-                tlwnc.get_variable<float>("bias1_lower",{N_lay1}),
-                tlwnc.get_variable<float>("bias2_lower",{N_lay2}),
-                tlwnc.get_variable<float>("bias3_lower",{N_layOlw}),
-                tlwnc.get_variable<float>("wgth1_lower",{N_lay1,  N_layI}),
-                tlwnc.get_variable<float>("wgth2_lower",{N_lay2,  N_lay1}),
-                tlwnc.get_variable<float>("wgth3_lower",{N_layOlw,N_lay2}),
-                tlwnc.get_variable<float>("Fmean_lower",{N_layI}),
-                tlwnc.get_variable<float>("Fstdv_lower",{N_layI}),
-                tlwnc.get_variable<float>("Lmean_lower",{N_layOlw}),
-                tlwnc.get_variable<float>("Lstdv_lower",{N_layOlw}),
-                tlwnc.get_variable<float>("bias1_upper",{N_lay1}),
-                tlwnc.get_variable<float>("bias2_upper",{N_lay2}),
-                tlwnc.get_variable<float>("bias3_upper",{N_layOlw}),
-                tlwnc.get_variable<float>("wgth1_upper",{N_lay1,  N_layI}),
-                tlwnc.get_variable<float>("wgth2_upper",{N_lay2,  N_lay1}),
-                tlwnc.get_variable<float>("wgth3_upper",{N_layOlw,N_lay2}),
-                tlwnc.get_variable<float>("Fmean_upper",{N_layI}),
-                tlwnc.get_variable<float>("Fstdv_upper",{N_layI}),
-                tlwnc.get_variable<float>("Lmean_upper",{N_layOlw}),
-                tlwnc.get_variable<float>("Lstdv_upper",{N_layOlw}),
-                N_layOlw,N_layI);
+                ssanc.get_variable<float>("bias1_lower",{N_lay1}),
+                ssanc.get_variable<float>("bias2_lower",{N_lay2}),
+                ssanc.get_variable<float>("bias3_lower",{N_layOsw}),
+                ssanc.get_variable<float>("wgth1_lower",{N_lay1,  N_layI}),
+                ssanc.get_variable<float>("wgth2_lower",{N_lay2,  N_lay1}),
+                ssanc.get_variable<float>("wgth3_lower",{N_layOsw,N_lay2}),
+                ssanc.get_variable<float>("Fmean_lower",{N_layI}),
+                ssanc.get_variable<float>("Fstdv_lower",{N_layI}),
+                ssanc.get_variable<float>("Lmean_lower",{N_layOsw}),
+                ssanc.get_variable<float>("Lstdv_lower",{N_layOsw}),
+                ssanc.get_variable<float>("bias1_upper",{N_lay1}),
+                ssanc.get_variable<float>("bias2_upper",{N_lay2}),
+                ssanc.get_variable<float>("bias3_upper",{N_layOsw}),
+                ssanc.get_variable<float>("wgth1_upper",{N_lay1,  N_layI}),
+                ssanc.get_variable<float>("wgth2_upper",{N_lay2,  N_lay1}),
+                ssanc.get_variable<float>("wgth3_upper",{N_layOsw,N_lay2}),
+                ssanc.get_variable<float>("Fmean_upper",{N_layI}),
+                ssanc.get_variable<float>("Fstdv_upper",{N_layI}),
+                ssanc.get_variable<float>("Lmean_upper",{N_layOsw}),
+                ssanc.get_variable<float>("Lstdv_upper",{N_layOsw}),
+                N_layOsw,N_layI);
 
+    Netcdf_group tswnc = NcFile.get_group("TauSW");
     Network TSW(idx_tropo,idxupper,
-                tlwnc.get_variable<float>("bias1_lower",{N_lay1}),
-                tlwnc.get_variable<float>("bias2_lower",{N_lay2}),
-                tlwnc.get_variable<float>("bias3_lower",{N_layOlw}),
-                tlwnc.get_variable<float>("wgth1_lower",{N_lay1,  N_layI}),
-                tlwnc.get_variable<float>("wgth2_lower",{N_lay2,  N_lay1}),
-                tlwnc.get_variable<float>("wgth3_lower",{N_layOlw,N_lay2}),
-                tlwnc.get_variable<float>("Fmean_lower",{N_layI}),
-                tlwnc.get_variable<float>("Fstdv_lower",{N_layI}),
-                tlwnc.get_variable<float>("Lmean_lower",{N_layOlw}),
-                tlwnc.get_variable<float>("Lstdv_lower",{N_layOlw}),
-                tlwnc.get_variable<float>("bias1_upper",{N_lay1}),
-                tlwnc.get_variable<float>("bias2_upper",{N_lay2}),
-                tlwnc.get_variable<float>("bias3_upper",{N_layOlw}),
-                tlwnc.get_variable<float>("wgth1_upper",{N_lay1,  N_layI}),
-                tlwnc.get_variable<float>("wgth2_upper",{N_lay2,  N_lay1}),
-                tlwnc.get_variable<float>("wgth3_upper",{N_layOlw,N_lay2}),
-                tlwnc.get_variable<float>("Fmean_upper",{N_layI}),
-                tlwnc.get_variable<float>("Fstdv_upper",{N_layI}),
-                tlwnc.get_variable<float>("Lmean_upper",{N_layOlw}),
-                tlwnc.get_variable<float>("Lstdv_upper",{N_layOlw}),
-                N_layOlw,N_layI);
-
+                tswnc.get_variable<float>("bias1_lower",{N_lay1}),
+                tswnc.get_variable<float>("bias2_lower",{N_lay2}),
+                tswnc.get_variable<float>("bias3_lower",{N_layOsw}),
+                tswnc.get_variable<float>("wgth1_lower",{N_lay1,  N_layI}),
+                tswnc.get_variable<float>("wgth2_lower",{N_lay2,  N_lay1}),
+                tswnc.get_variable<float>("wgth3_lower",{N_layOsw,N_lay2}),
+                tswnc.get_variable<float>("Fmean_lower",{N_layI}),
+                tswnc.get_variable<float>("Fstdv_lower",{N_layI}),
+                tswnc.get_variable<float>("Lmean_lower",{N_layOsw}),
+                tswnc.get_variable<float>("Lstdv_lower",{N_layOsw}),
+                tswnc.get_variable<float>("bias1_upper",{N_lay1}),
+                tswnc.get_variable<float>("bias2_upper",{N_lay2}),
+                tswnc.get_variable<float>("bias3_upper",{N_layOsw}),
+                tswnc.get_variable<float>("wgth1_upper",{N_lay1,  N_layI}),
+                tswnc.get_variable<float>("wgth2_upper",{N_lay2,  N_lay1}),
+                tswnc.get_variable<float>("wgth3_upper",{N_layOsw,N_lay2}),
+                tswnc.get_variable<float>("Fmean_upper",{N_layI}),
+                tswnc.get_variable<float>("Fstdv_upper",{N_layI}),
+                tswnc.get_variable<float>("Lmean_upper",{N_layOsw}),
+                tswnc.get_variable<float>("Lstdv_upper",{N_layOsw}),
+                N_layOsw,N_layI);
+   
+    std::cout<<"start shortwave: "<<std::endl;
     std::unique_ptr<Optical_props_arry<TF>> optical_props_sw =
             std::make_unique<Optical_props_2str<TF>>(n_col, n_lay, *kdist_sw);
     starttime = get_wall_time();

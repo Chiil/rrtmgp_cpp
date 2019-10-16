@@ -85,7 +85,6 @@ namespace
             float* restrict const layer_in,
             float* restrict const layer_out)
     {
- 
         for (int i=0; i<Nbatch; ++i)
         {
             for (int j=0; j<Nrow; ++j)
@@ -111,6 +110,24 @@ namespace
         return x;
     }
 
+    void normalize_input(
+            float* restrict const input, 
+            const float* restrict const input_mean,
+            const float* restrict const input_stdev,
+            const int Nbatch,
+            const int N_layI)
+    {
+        for (int k=0; k<N_layI; ++k)
+        {
+            #pragma ivdep
+            for (int i=0; i<Nbatch; ++i)
+            {
+                const int idxin = i + k * Nbatch;
+                input[idxin]=(input[idxin] - input_mean[k]) / input_stdev[k];
+            }   
+        }   
+    }
+
     void Feedforward(
             float* restrict const input, 
             float* restrict const output,
@@ -128,33 +145,40 @@ namespace
             float* restrict const layer2,
             const int Nbatch,
             const int N_layO,
-            const int N_layI)
+            const int N_layI,
+            const int do_exp,
+            const int do_inpnorm)
     
     {  
-         //normalization and blas solver
-         for (int k=0; k<N_layI; ++k)
-         {
-             #pragma ivdep
-             for (int i=0; i<Nbatch; ++i)
-             {
-                 const int idxin = i + k * Nbatch;
-                 input[idxin]=(input[idxin] - input_mean[k]) / input_stdev[k];
-             }   
-         }
-    
-         matmul_bias_act_blas(Nbatch,N_lay1,N_layI,layer1_wgth,layer1_bias,input,layer1,0);
-         matmul_bias_act_blas(Nbatch,N_lay2,N_lay1,layer2_wgth,layer2_bias,layer1,layer2,0);
-         cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N_layO,Nbatch,N_lay2,1.,output_wgth,N_lay2,layer2,Nbatch,0.,output,Nbatch);
-         //output layer and denormalize
-         for (int j=0; j<N_layO; ++j)
-         {
-             #pragma ivdep
-             for (int i=0; i<Nbatch; ++i)
-             {
-                 const int layidx = i + j * Nbatch;
-                 output[layidx] = faster_but_inaccurate_exp(((output[layidx] +  output_bias[j]) * output_stdev[j]) + output_mean[j]) ;
-             }
-         }
+        if (do_inpnorm) {normalize_input(input,input_mean,input_stdev,Nbatch,N_layI);}
+
+        matmul_bias_act_blas(Nbatch,N_lay1,N_layI,layer1_wgth,layer1_bias,input,layer1,0);
+        matmul_bias_act_blas(Nbatch,N_lay2,N_lay1,layer2_wgth,layer2_bias,layer1,layer2,0);
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N_layO,Nbatch,N_lay2,1.,output_wgth,N_lay2,layer2,Nbatch,0.,output,Nbatch);
+
+        //output layer and denormalize
+        if (do_exp == 1)
+        {
+            for (int j=0; j<N_layO; ++j)
+            {
+                #pragma ivdep
+                for (int i=0; i<Nbatch; ++i)
+                {
+                    const int layidx = i + j * Nbatch;
+                    output[layidx] = faster_but_inaccurate_exp(((output[layidx] +  output_bias[j]) * output_stdev[j]) + output_mean[j]) ;
+                }
+            }
+        } else {
+            for (int j=0; j<N_layO; ++j)
+            {
+                #pragma ivdep
+                for (int i=0; i<Nbatch; ++i)
+                {
+                    const int layidx = i + j * Nbatch;
+                    output[layidx] = ((output[layidx] +  output_bias[j]) * output_stdev[j]) + output_mean[j] ;
+                }
+            }
+        }
     }
 }
 
@@ -175,7 +199,9 @@ void Network::file_reader(
 void Network::Inference(
         float* inputs,
         float* outputs,
-        const int lower_atmos)
+        const int lower_atmos,
+        const int do_exp,
+        const int do_inpnorm)
 {
     if (lower_atmos == 1)
     {
@@ -198,7 +224,9 @@ void Network::Inference(
             this->layer2.data(),
             this->Nbatch_lower,
             this->N_layO,
-            this->N_layI);
+            this->N_layI,
+            do_exp,
+            do_inpnorm);
     } else {
         this->layer1.resize(N_lay1*this->Nbatch_upper);
         this->layer2.resize(N_lay2*this->Nbatch_upper);
@@ -219,7 +247,9 @@ void Network::Inference(
             this->layer2.data(),
             this->Nbatch_upper,
             this->N_layO,
-            this->N_layI);
+            this->N_layI,
+            do_exp,
+            do_inpnorm);
     }
 
 }

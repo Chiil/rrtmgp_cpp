@@ -10,7 +10,9 @@ class Network
         void Inference(
             float* inputs,
             float* outputs,
-            const int lower_atmos);
+            const int lower_atmos,
+            const int do_exp,
+            const int do_inpnorm);
 
         Network(const int Nbatch_lower,
                 const int Nbatch_upper,
