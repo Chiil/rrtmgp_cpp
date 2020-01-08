@@ -164,7 +164,8 @@ void Gas_opticsNN<TF>::gas_optics(Network& TLW,Network& PLK,
 
     compute_tau_sources_NN(TLW, PLK,
             ncol, nlay, ngpt, nband,
-            play, plev, tlay, tlev,
+            play.ptr(), plev.ptr(), 
+            tlay.ptr(), tlev.ptr(),
             gas_desc, sources, 
             optical_props);   
 
@@ -192,8 +193,8 @@ void Gas_opticsNN<TF>::gas_optics(
     compute_tau_ssa_NN(
             SSA,TSW,
             ncol, nlay, ngpt, nband,
-            play, plev, tlay, gas_desc,
-            optical_props);
+            play.ptr(), plev.ptr(), tlay.ptr(), 
+            gas_desc, optical_props);
 
     // External source function is constant.
     for (int igpt=1; igpt<=ngpt; ++igpt)
@@ -247,9 +248,9 @@ template<typename TF>
 void Gas_opticsNN<TF>::compute_tau_ssa_NN(
         Network& SSA, Network& TSW,
         const int ncol, const int nlay, const int ngpt, const int nband,
-        const Array<TF,2>& play,
-        const Array<TF,2>& plev,
-        const Array<TF,2>& tlay,
+        const double* restrict const play,
+        const double* restrict const plev,
+        const double* restrict const tlay,
         const Gas_concs<TF>& gas_desc,
         std::unique_ptr<Optical_props_arry<TF>>& optical_props) const
 {
@@ -262,19 +263,26 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
     float een = 1.;
 
     //find index that defines border between upper and lower atmosphere
-    for (int i = 1; i <= nlay; i++)
+    for (int i = 0; i < nlay; i++)
     {
-       if (play({1,i}) > this->press_ref_trop)
-       {
-           idx_tropo += 1;
-       }
+       if (play[i] > this->press_ref_trop) {idx_tropo += 1;}
     }
 
     std::cout<<"idxtropo: "<<idx_tropo<<std::endl;
 
+    float dp[ncol * nlay];
+    for (int ilay=0; ilay<nlay; ++ilay)
+        for (int icol=0; icol<ncol; ++icol)
+        {
+            const int dpidx = icol*nlay + ilay;
+            const int plidx = icol*(nlay+1) + ilay;
+            dp[dpidx] = abs(plev[plidx]-plev[plidx+1]);
+        }
+
     //get gas concentrations
-    const Array<TF,2>& h2o = gas_desc.get_vmr(this->gas_names({1}));
-    const Array<TF,2>& o3  = gas_desc.get_vmr(this->gas_names({3}));
+    const double* h2o = gas_desc.get_vmr(this->gas_names({1})).ptr();
+    const double* o3  = gas_desc.get_vmr(this->gas_names({3})).ptr();
+
     //// Lower atmosphere:
     //fill input array  
     float input_lower[idx_tropo*Ninput];
@@ -283,14 +291,14 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
     starttime = get_wall_time2();
     for (int i = 0; i < idx_tropo; ++i)
     {
-        const float val = mylog(h2o({1,i+1}));
+        const float val = mylog(h2o[i]);
         input_lower[i] = val;
     }
 
     int startidx = idx_tropo * 1;
     for (int i = 0; i < idx_tropo; ++i)
     {
-        const float val = mylog(o3({1,i+1}));
+        const float val = mylog(o3[i]);
         const int idx   = startidx + i;
         input_lower[idx] = val;
     }
@@ -298,7 +306,7 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
     startidx = idx_tropo * 2;
     for (int i = 0; i < idx_tropo; ++i)
     {
-        const float val = mylog(play({1,i+1}));
+        const float val = mylog(play[i]);
         const int idx   = startidx + i;
         input_lower[idx] = val;
     }
@@ -306,27 +314,20 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
     startidx = idx_tropo * 3;
     for (int i = 0; i < idx_tropo; ++i)
     {
-        const float val = tlay({1,i+1});
+        const float val = tlay[i];
         const int idx   = startidx + i;
         input_lower[idx] = val;
     }
 
-    float dp[ncol * nlay];
-    for (int ilay=1; ilay<=nlay; ++ilay)
-        for (int icol=1; icol<=ncol; ++icol)
-        {
-              const int dpidx = (icol-1)*nlay + (ilay-1);
-           dp[dpidx] = abs(plev({icol,ilay})-plev({icol,ilay+1}));
-        }
 
     endtime = get_wall_time2();
     std::cout<<"SW input time: "<<endtime-starttime<<std::endl;
 
-    TSW.Inference(input_lower, output_lower_tau, 1,1,1);
-    SSA.Inference(input_lower, output_lower_ssa, 1,0,0);
-
-    copy_arrays_ssa(output_lower_ssa,ssa,ncol,0,idx_tropo,ngpt,nlay);
-    copy_arrays_tau(output_lower_tau,dp,tau,ncol,0,idx_tropo,ngpt,nlay);
+    TSW.Inference(input_lower, output_lower_tau, 1,1,1); //lower atmosphere, exp(output), normalize input
+    SSA.Inference(input_lower, output_lower_ssa, 1,0,0); //lower atmosphere, output, input already normalized);
+   
+    copy_arrays_ssa(output_lower_ssa,ssa,ncol,0,idx_tropo,ngpt,nlay);    
+    copy_arrays_tau(output_lower_tau,dp,tau,ncol,0,idx_tropo,ngpt,nlay); 
 
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++     
@@ -341,14 +342,14 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
     for (int i = idx_tropo; i < batchSize; ++i)
     {
         const int idx = i - idx_tropo;
-        const float val = mylog(h2o({1,i+1}));
+        const float val = mylog(h2o[i]);
         input_upper[idx] = val;
     }
 
     startidx = Nlayupper * 1;
     for (int i = idx_tropo; i < batchSize; ++i)
     {
-        const float val = mylog(o3({1,i+1}));
+        const float val = mylog(o3[i]);
         const int idx   = i - idx_tropo + startidx;
         input_upper[idx] = val;
     }
@@ -356,7 +357,7 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
     startidx = Nlayupper * 2;
     for (int i = idx_tropo; i < batchSize; ++i)
     {
-        const float val = mylog(play({1,i+1}));
+        const float val = mylog(play[i]);
         const int idx   = i - idx_tropo + startidx;
         input_upper[idx] = val;
     }
@@ -364,16 +365,16 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
     startidx = Nlayupper * 3;
     for (int i = idx_tropo; i < batchSize; ++i)
     {
-        const float val = tlay({1,i+1});
+        const float val = tlay[i];
         const int idx   = i - idx_tropo + startidx;
         input_upper[idx] = val;
     }
     endtime = get_wall_time2();
     std::cout<<"SW input time: "<<endtime-starttime<<std::endl;
 
-    TSW.Inference(input_upper, output_upper_tau, 0,1,1);
-    SSA.Inference(input_upper, output_upper_ssa, 0,0,0);
-
+    TSW.Inference(input_upper, output_upper_tau, 0,1,1); //upper atmosphere, exp(output), normalize input
+    SSA.Inference(input_upper, output_upper_ssa, 0,0,0); //upper atmosphere, output, input already normalized 
+    
     copy_arrays_ssa(output_upper_ssa,ssa,ncol,idx_tropo,batchSize,ngpt,nlay);
     copy_arrays_tau(output_upper_tau,dp,tau,ncol,idx_tropo,batchSize,ngpt,nlay);
 
@@ -385,10 +386,10 @@ void Gas_opticsNN<TF>::compute_tau_ssa_NN(
 template<typename TF>
 void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
         const int ncol, const int nlay, const int ngpt, const int nband,
-        const Array<TF,2>& play,
-        const Array<TF,2>& plev,
-        const Array<TF,2>& tlay,
-        const Array<TF,2>& tlev,
+        const double* restrict const play,
+        const double* restrict const plev,
+        const double* restrict const tlay,
+        const double* restrict const tlev,
         const Gas_concs<TF>& gas_desc,
         Source_func_lw<TF>& sources,
         std::unique_ptr<Optical_props_arry<TF>>& optical_props) const
@@ -402,18 +403,27 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
     int idx_tropo = 0;
     float nul = 0.;
     float een = 1.;
+
     //find index that defines border between upper and lower atmosphere
-    for (int i = 1; i <= nlay; i++)
+    for (int i = 0; i < nlay; i++)
     {
-       if (play({1,i}) > this->press_ref_trop)
-       {
-           idx_tropo += 1;
-       }
+       if (play[i] > this->press_ref_trop) {idx_tropo += 1;}
     }
+
     std::cout<<"idx_tropo: "<<idx_tropo<<std::endl;
+    
+    float dp[ncol * nlay];
+    for (int ilay=0; ilay<nlay; ++ilay)
+        for (int icol=0; icol<ncol; ++icol)
+        {
+            const int dpidx = icol*nlay + ilay;
+            const int plidx = icol*(nlay+1) + ilay;
+            dp[dpidx] = abs(plev[plidx]-plev[plidx+1]);
+        }
+    
     //get gas concentrations
-    const Array<TF,2>& h2o = gas_desc.get_vmr(this->gas_names({1}));
-    const Array<TF,2>& o3  = gas_desc.get_vmr(this->gas_names({3}));
+    const double* h2o = gas_desc.get_vmr(this->gas_names({1})).ptr();
+    const double* o3  = gas_desc.get_vmr(this->gas_names({3})).ptr();
 
     //// Lower atmosphere:
     //fill input array  
@@ -424,14 +434,14 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
 
     for (int i = 0; i < idx_tropo; ++i)
     {
-        const float val = mylog(h2o({1,i+1}));
+        const float val = mylog(h2o[i]);
         input_lower_tau[i] = val;
         input_lower_plk[i] = val;
     }
     int startidx = idx_tropo * 1;
     for (int i = 0; i < idx_tropo; ++i)
     {
-        const float val = mylog(o3({1,i+1}));
+        const float val = mylog(o3[i]);
         const int idx   = startidx + i;
         input_lower_tau[idx] = val;
         input_lower_plk[idx] = val;
@@ -440,7 +450,7 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
     startidx = idx_tropo * 2;
     for (int i = 0; i < idx_tropo; ++i)
     {
-        const float val = mylog(play({1,i+1}));
+        const float val = mylog(play[i]);
         const int idx   = startidx + i;
         input_lower_tau[idx] = val;
         input_lower_plk[idx] = val;
@@ -449,55 +459,29 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
     startidx = idx_tropo * 3;
     for (int i = 0; i < idx_tropo; ++i)
     {
-        const float val = tlay({1,i+1});
+        const float val = tlay[i];
         const int idx   = startidx + i;
         input_lower_tau[idx] = val;
         input_lower_plk[idx] = val;
     }
 
     startidx = idx_tropo * 4;
-    input_lower_plk[startidx] = tlev({1,1});
+    input_lower_plk[startidx] = tlev[0];
     for (int i = 0; i < idx_tropo-1; ++i)
     {
-        const float val = tlev({1,i+2});
+        const float val = tlev[i+1];
         const int idx1 = startidx+idx_tropo+i;
         const int idx2 = startidx+i+1;
         input_lower_plk[idx1] = val;
         input_lower_plk[idx2] = val;
     }
-    input_lower_plk[idx_tropo * 6 - 1] = tlev({1,idx_tropo+1});
+    input_lower_plk[idx_tropo * 6 - 1] = tlev[idx_tropo];
 
-
-    float dp[ncol* nlay];
-    for (int ilay=1; ilay<=nlay; ++ilay)
-        for (int icol=1; icol<=ncol; ++icol)
-        {
-           const int dpidx = (icol-1)*nlay + (ilay-1);
-           dp[dpidx] = abs(plev({icol,ilay})-plev({icol,ilay+1}));
-        }
-
-
-//    endtime = get_wall_time2();
-//    std::cout<<"input time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
-    
-//    starttime = get_wall_time2();
-    TLW.Inference(input_lower_tau, output_lower_tau, 1,1,1);
-//    endtime = get_wall_time2();
-//    std::cout<<"NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
-
-//    starttime = get_wall_time2();
-    PLK.Inference(input_lower_plk, output_lower_plk, 1,1,1);
-//    endtime = get_wall_time2();
-
+    TLW.Inference(input_lower_tau, output_lower_tau, 1,1,1); //lower atmosphere, exp(output), normalize input
+    PLK.Inference(input_lower_plk, output_lower_plk, 1,1,1); //lower atmosphere, exp(output), normalize input
  
-//    starttime = get_wall_time2();
     copy_arrays_tau(output_lower_tau,dp,tau,ncol,0,idx_tropo,ngpt,nlay);
-//    endtime = get_wall_time2();
-//    starttime = get_wall_time2();
     copy_arrays_plk(output_lower_plk,src_layer,src_lvinc,src_lvdec,ncol,0,idx_tropo,ngpt,nlay);
-//    endtime = get_wall_time2();
-//    std::cout<<"Qp_NNoutputPgad: "<<endtime-starttime<<" "<<src_layer({1,1200,1})<<"x"<<src_lvinc({66,666,1})<<std::endl;
-
 
     //// Upper atmosphere:
     //fill input array
@@ -506,11 +490,12 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
     float input_upper_plk[(Nlayupper)*(Ninput+2)];
     float output_upper_tau[(Nlayupper)*ngpt];
     float output_upper_plk[(Nlayupper)*ngpt*3];   
+
     //do inference Optical Depth
     for (int i = idx_tropo; i < batchSize; ++i)
     {
         const int idx = i - idx_tropo;
-        const float val = mylog(h2o({1,i+1}));
+        const float val = mylog(h2o[i]);
         input_upper_tau[idx] = val;
         input_upper_plk[idx] = val;
     }
@@ -519,7 +504,7 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
     for (int i = idx_tropo; i < batchSize; ++i)
     {
         const int idx = i - idx_tropo + startidx;
-        const float val = mylog(o3({1,i+1}));
+        const float val = mylog(o3[i]);
         input_upper_tau[idx] = val;
         input_upper_plk[idx] = val;
     }
@@ -527,7 +512,7 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
     startidx = Nlayupper * 2;
     for (int i = idx_tropo; i < batchSize; ++i)
     {
-        const float val = mylog(play({1,i+1}));
+        const float val = mylog(play[i]);
         const int idx   = i - idx_tropo + startidx;
         input_upper_tau[idx] = val;
         input_upper_plk[idx] = val;
@@ -536,58 +521,30 @@ void Gas_opticsNN<TF>::compute_tau_sources_NN(Network& TLW,Network& PLK,
     startidx = Nlayupper * 3;
     for (int i = idx_tropo; i < batchSize; ++i)
     {
-        const float val = tlay({1,i+1});
+        const float val = tlay[i];
         const int idx   = i - idx_tropo + startidx;
         input_upper_tau[idx] = val;
         input_upper_plk[idx] = val;
     }
 
     startidx = Nlayupper * 4;
-    input_upper_plk[startidx] = tlev({1,1+idx_tropo});
+    input_upper_plk[startidx] = tlev[idx_tropo];
     for (int i = idx_tropo; i < batchSize-1; ++i)
     {
-        const float val = tlev({1,i+2});
+        const float val = tlev[i+1];
         const int idx1 = startidx+Nlayupper+(i-idx_tropo);
         const int idx2 = startidx+1+(i-idx_tropo);
         input_upper_plk[idx1] = val;
         input_upper_plk[idx2] = val;
     }
-    input_upper_plk[Nlayupper * 6 - 1] = tlev({1,batchSize+1});
+    input_upper_plk[Nlayupper * 6 - 1] = tlev[batchSize];
 
-//    starttime = get_wall_time2();
-    TLW.Inference(input_upper_tau, output_upper_tau, 0,1,1);
-//    endtime = get_wall_time2();
-//    std::cout<<"Up_NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
-
-//    starttime = get_wall_time2();
-    PLK.Inference(input_upper_plk, output_upper_plk, 0,1,1);
-//    endtime = get_wall_time2();
-//    std::cout<<"Up_NNsolver time: "<<endtime-starttime<<" "<<output_lower_tau[5]<<std::endl;
-
-//    starttime = get_wall_time2();
-//    copy_arrays(output_upper_tau,dp,TAU,ncol,idx_tropo,batchSize,ngpt,nlay);
-//    endtime = get_wall_time2();
-//    std::cout<<"Up_NNoutputTauGod time: "<<endtime-starttime<<" "<<tau({6,5000,1})<<" "<<tau({66,6666,1})<<std::endl;
-
-//    starttime = get_wall_time2();
-    copy_arrays_tau(output_upper_tau,dp,tau,ncol,idx_tropo,batchSize,ngpt,nlay);
-//    endtime = get_wall_time2();
-//    std::cout<<"Up_NNoutputTauGad time: "<<endtime-starttime<<" "<<tau({6,5000,1})<<" "<<tau({66,6666,1})<<std::endl;
-//
-//    
-//    starttime = get_wall_time2();
-//    copy_arrays_plk(output_upper_plk,src_LAYER,src_LVINC,src_LVDEC,ncol,idx_tropo,batchSize,ngpt);
-//    endtime = get_wall_time2();
-//    std::cout<<"Up_NNoutputPgod: "<<endtime-starttime<<" "<<src_layer({1,5000,1})<<"x"<<src_lvinc({1,6666})<<std::endl;
-
-//    starttime = get_wall_time2();
-    copy_arrays_plk(output_upper_plk,src_layer,src_lvinc,src_lvdec,ncol,idx_tropo,batchSize,ngpt,nlay);
-//    endtime = get_wall_time2();
-    //std::cout<<"Up_NNoutputPgad: "<<endtime-starttime<<" "<<src_layer({14,8888,1})<<"x"<<src_lvinc({1,8888})<<std::endl;
-
-
+    TLW.Inference(input_upper_tau, output_upper_tau, 0,1,1); //upper atmosphere, exp(output), normalize input
+    PLK.Inference(input_upper_plk, output_upper_plk, 0,1,1); //upper atmosphere, exp(output), normalize input
+ 
+    copy_arrays_tau(output_upper_tau,dp,tau,ncol,idx_tropo,batchSize,ngpt,nlay); 
+    copy_arrays_plk(output_upper_plk,src_layer,src_lvinc,src_lvdec,ncol,idx_tropo,batchSize,ngpt,nlay); 
 }
-
 
 
 

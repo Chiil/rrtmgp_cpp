@@ -13,6 +13,7 @@
 #include <sstream>
 #include <Network.h>
 
+#define restrict __restrict__
 // Forward declarations.
 template<typename TF> class Optical_props;
 template<typename TF> class Optical_props_arry;
@@ -71,19 +72,18 @@ class Gas_opticsNN : public Optical_props<TF>
                 Network& SSA,
                 Network& TSW,
                 const int ncol, const int nlay, const int ngpt, const int nband,
-                const Array<TF,2>& play,
-
-                const Array<TF,2>& plev,
-                const Array<TF,2>& tlay,
+                const double* restrict const play,
+                const double* restrict const plev,
+                const double* restrict const tlay,
                 const Gas_concs<TF>& gas_desc,
                 std::unique_ptr<Optical_props_arry<TF>>& optical_props) const;
 
         void compute_tau_sources_NN(Network& TLW,Network& PLK,
                 const int ncol, const int nlay, const int nband, const int ngpt,
-                const Array<TF,2>& play, 
-                const Array<TF,2>& plev,
-                const Array<TF,2>& tlay, 
-                const Array<TF,2>& tlev,
+                const double* restrict const play, 
+                const double* restrict const plev,
+                const double* restrict const tlay, 
+                const double* restrict const tlev,
                 const Gas_concs<TF>& gas_desc,
                 Source_func_lw<TF>& sources,
                 std::unique_ptr<Optical_props_arry<TF>>& optical_props) const;
