@@ -108,25 +108,9 @@ namespace
                 get_variable_string("gas_names", {n_absorbers}, coef_nc, n_char, true), {n_absorbers});
         Array<TF,2> band_lims(coef_nc.get_variable<TF>("bnd_limits_wavenumber", {n_bnds, 2}), {2, n_bnds});
         Array<int,2> band2gpt(coef_nc.get_variable<int>("bnd_limits_gpt", {n_bnds, 2}), {2, n_bnds});
-        Array<std::string,1> plan_files({4});
-        if (do_taussa) 
-        {
-            plan_files({1}) = "TRTEngineOp_1_tsw.plan";
-            plan_files({2}) = "TRTEngineOp_0_tsw.plan";
-            plan_files({3}) = "TRTEngineOp_1_ssa.plan";
-            plan_files({4}) = "TRTEngineOp_0_ssa.plan";
-        }
-        else
-        {
-            plan_files({1}) = "TRTEngineOp_1_ray.plan";
-            plan_files({2}) = "TRTEngineOp_0_ray.plan";
-            plan_files({3}) = "TRTEngineOp_1_abs.plan";
-            plan_files({4}) = "TRTEngineOp_0_abs.plan";
-        }
         Array<TF,1> solar_src(
                 coef_nc.get_variable<TF>("solar_source", {n_gpts}), {n_gpts});
         return Gas_opticsNN<TF>(
-                plan_files,
                 gas_names,
                 band2gpt,
                 band_lims,
@@ -150,23 +134,12 @@ namespace
                 get_variable_string("gas_names", {n_absorbers}, coef_nc, n_char, true), {n_absorbers});
         Array<TF,2> band_lims(coef_nc.get_variable<TF>("bnd_limits_wavenumber", {n_bnds, 2}), {2, n_bnds});
         Array<int,2> band2gpt(coef_nc.get_variable<int>("bnd_limits_gpt", {n_bnds, 2}), {2, n_bnds});
-        Array<std::string,1> plan_files({4});
-
-        plan_files({1}) = "TRTEngineOp_1_tlw.plan";
-        plan_files({2}) = "TRTEngineOp_0_tlw.plan";
-        plan_files({3}) = "TRTEngineOp_1_plk.plan";
-        plan_files({4}) = "TRTEngineOp_0_plk.plan";
         return Gas_opticsNN<TF>(
-                plan_files,
                 gas_names,
                 band2gpt,
                 band_lims);
     }
 
-    std::vector<float> load_weights(Netcdf_group group)
-    {
-        return group.get_variable<float>("wgth1",{32,4});
-    }
 }
 
 template<typename TF>
@@ -196,7 +169,6 @@ void solve_radiation(Master& master)
     constexpr int N_layOlwp=768;
     constexpr int N_layOsw=224;
     Netcdf_file NcFile(master, "weights.nc", Netcdf_mode::Read);
-
 
     // These are the global variables that need to be contained in a class.
     Gas_concs<TF> gas_concs;
@@ -323,9 +295,13 @@ void solve_radiation(Master& master)
             gas_concs,
             optical_props_lw,
             sources,
-            t_lev);
+            t_lev,
+            idx_tropo,
+            N_layI);
     endtime = get_wall_time();
     std::cout<<"LONGWAVE "<<endtime-starttime<<std::endl;
+    
+    //second iterations, first use of BLAS is always slow
     starttime=get_wall_time();
     kdist_lw->gas_optics(TLW,PLK,
             p_lay,
@@ -335,7 +311,9 @@ void solve_radiation(Master& master)
             gas_concs,
             optical_props_lw,
             sources,
-            t_lev);
+            t_lev,
+            idx_tropo,
+            N_layI);
     endtime = get_wall_time();
     std::cout<<"LONGWAVE "<<endtime-starttime<<std::endl;
 
@@ -374,7 +352,8 @@ void solve_radiation(Master& master)
         lw_flux_dn ({1, ilev}) = fluxes->get_flux_dn ()({1, ilev});
         lw_flux_net({1, ilev}) = fluxes->get_flux_net()({1, ilev});
     }
-    //Short waveeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+
+    //shortwave
     const int n_gpt_sw = kdist_sw->get_ngpt();
     Array<TF,2> toa_src({n_col, n_gpt_sw});
     Netcdf_group ssanc = NcFile.get_group("SSA");
@@ -425,9 +404,9 @@ void solve_radiation(Master& master)
                 tswnc.get_variable<float>("Lstdv_upper",{N_layOsw}),
                 N_layOsw,N_layI);
    
-    std::cout<<"start shortwave: "<<std::endl;
     std::unique_ptr<Optical_props_arry<TF>> optical_props_sw =
             std::make_unique<Optical_props_2str<TF>>(n_col, n_lay, *kdist_sw);
+   
     starttime = get_wall_time();
     kdist_sw->gas_optics(
             p_lay,
@@ -437,10 +416,11 @@ void solve_radiation(Master& master)
             optical_props_sw,
             toa_src,
             SSA,
-            TSW);
+            TSW,
+            idx_tropo,
+            N_layI);
     endtime = get_wall_time();
     std::cout<<"shortwave: "<<endtime-starttime<<std::endl;
-
 
     const TF tsi_scaling = 0.4053176301654965;
     for (int igpt=1; igpt<=n_gpt_sw; ++igpt)
@@ -538,11 +518,11 @@ void solve_radiation(Master& master)
     nc_lw_gpt_flux_dn.insert(lw_gpt_flux_dn.v(),{0,0,0});
     auto nc_lw_gpt_flux_up = output_nc.add_variable<TF>("lw_gpt_flux_up" , {"gpt","lev", "col"});
     nc_lw_gpt_flux_up.insert(lw_gpt_flux_up.v(),{0,0,0});
-    
-    
+       
     Array<TF,3> myplk = sources.get_lay_source();
     auto planckout = output_nc.add_variable<TF>("planck" , {"gpt","lay", "col"});
     planckout.insert(myplk.v(),{0,0,0});
+
     Array<TF,3> myplkI= sources.get_lev_source_inc();
     auto planckoutI = output_nc.add_variable<TF>("planckI" , {"gpt","lev", "col"});
     planckoutI.insert(myplkI.v(),{0,0,0});
@@ -563,7 +543,6 @@ int main()
         master.init();
 
         solve_radiation<FLOAT_TYPE>(master);
-
     }
 
     // Catch any exceptions and return 1.

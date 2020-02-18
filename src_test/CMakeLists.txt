@@ -44,15 +44,26 @@ if(USECUDA)
   cuda_add_executable(test_rcemip test_rcemip.cpp)
   target_link_libraries(test_rcemip rrtmgp ${LIBS} m)
 else()
+
 #  add_executable(test_rrtmgp test_rrtmgp.cpp)
 #  target_link_libraries(test_rrtmgp rrtmgp ${LIBS} m)
 
   add_executable(test_rcemip test_rcemip.cpp)
   target_link_libraries(test_rcemip rrtmgp ${LIBS} m)
+  
+  #supply 2D data (height, columns)
+  add_executable(test_rfmip2D test_rfmip2D.cpp)
+  target_link_libraries(test_rfmip2D rrtmgp ${LIBS} m)
 
-  add_executable(test_rcemipNN test_rcemipNN.cpp)
-  target_link_libraries(test_rcemipNN rrtmgp ${LIBS} m)
-  #add_executable(sampling sampling.cpp)
-  #target_link_libraries(sampling rrtmgp ${LIBS} m)
+  #supply 2D data (height, columns)
+  add_executable(test_rfmip2DNN test_rfmip2DNN.cpp)
+  target_link_libraries(test_rfmip2DNN rrtmgp ${LIBS} m)
+
+#  add_executable(test_rcemipNN test_rcemipNN.cpp)
+#  target_link_libraries(test_rcemipNN rrtmgp ${LIBS} m)
+
+  #Training data generation (no fluxes) 
+  add_executable(sampling sampling.cpp)
+  target_link_libraries(sampling rrtmgp ${LIBS} m)
 
 endif()

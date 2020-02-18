@@ -430,27 +430,6 @@ void solve_radiation(Master& master)
             t_lev);
     endtime = get_wall_time();
     std::cout<<"longwave: "<<endtime-starttime<<std::endl;
-    double* testtau = optical_props_lw->get_tau().ptr();
-    std::cout<<n_lay<<": "<<testtau[0]<<"-.-"<<testtau[2000]<<"-.-"<<testtau[12000]<<"-.-"<<testtau[240*23000]<<"-.-"<<testtau[256*40000-1]<<std::endl;
-    double* testplk = sources.get_lay_source().ptr();
-    std::cout<<n_lay<<": "<<testplk[0]<<"-x-"<<testplk[2000]<<"-x-"<<testplk[12000]<<"-x-"<<testplk[240*23000]<<"-x-"<<testplk[256*40000-5]<<std::endl;
-    double* testplk2 = sources.get_lev_source_inc().ptr();
-    std::cout<<n_lay<<": "<<testplk2[0]<<"-x-"<<testplk2[2000]<<"-x-"<<testplk2[12000]<<"-x-"<<testplk2[240*23000]<<"-x-"<<testplk2[256*40000-5]<<std::endl;
-    double* testplk3 = sources.get_lev_source_dec().ptr();
-    std::cout<<n_lay<<": "<<testplk3[0]<<"-x-"<<testplk3[2000]<<"-x-"<<testplk3[12000]<<"-x-"<<testplk3[240*23000]<<"-x-"<<testplk3[256*40000-5]<<std::endl;
-    starttime = get_wall_time();
-    kdist_lw->gas_optics(
-            p_lay,
-            p_lev,
-            t_lay,
-            t_sfc,
-            gas_concs,
-            optical_props_lw,
-            sources,
-            col_dry,
-            t_lev);
-    endtime = get_wall_time();
-    std::cout<<"longwave: "<<endtime-starttime<<std::endl;
 
     std::unique_ptr<Fluxes_broadband<TF>> fluxes =
             std::make_unique<Fluxes_broadband<TF>>(n_col, n_lev);
@@ -493,18 +472,6 @@ void solve_radiation(Master& master)
 
     std::unique_ptr<Optical_props_arry<TF>> optical_props_sw =
             std::make_unique<Optical_props_2str<TF>>(n_col, n_lay, *kdist_sw);
-    starttime = get_wall_time();
-    kdist_sw->gas_optics(
-            p_lay,
-            p_lev,
-            t_lay,
-            gas_concs,
-            optical_props_sw,
-            toa_src,
-            col_dry);
-    endtime = get_wall_time();
-    std::cout<<"shortwavee: "<<endtime-starttime<<std::endl;
-
     starttime = get_wall_time();
     kdist_sw->gas_optics(
             p_lay,
@@ -614,17 +581,18 @@ void solve_radiation(Master& master)
     nc_lw_gpt_flux_dn.insert(lw_gpt_flux_dn.v(),{0,0,0}); 
     auto nc_lw_gpt_flux_up = output_nc.add_variable<TF>("lw_gpt_flux_up" , {"gpt","lev", "col"});
     nc_lw_gpt_flux_up.insert(lw_gpt_flux_up.v(),{0,0,0});
-   Array<TF,3> myplk = sources.get_lay_source();
-   auto planckout = output_nc.add_variable<TF>("planck" , {"gpt","lay", "col"});
-   planckout.insert(myplk.v(),{0,0,0});
 
-   Array<TF,3> myplkI= sources.get_lev_source_inc();
-   auto planckoutI = output_nc.add_variable<TF>("planckI" , {"gpt","lev", "col"});
-   planckoutI.insert(myplkI.v(),{0,0,0});
+    Array<TF,3> myplk = sources.get_lay_source();
+    auto planckout = output_nc.add_variable<TF>("planck" , {"gpt","lay", "col"});
+    planckout.insert(myplk.v(),{0,0,0});
 
-   Array<TF,3> myplkD = sources.get_lev_source_dec();
-   auto planckoutD = output_nc.add_variable<TF>("planckD" , {"gpt","lev", "col"});
-   planckoutD.insert(myplkD.v(),{0,0,0});
+    Array<TF,3> myplkI= sources.get_lev_source_inc();
+    auto planckoutI = output_nc.add_variable<TF>("planckI" , {"gpt","lev", "col"});
+    planckoutI.insert(myplkI.v(),{0,0,0});
+    
+    Array<TF,3> myplkD = sources.get_lev_source_dec();
+    auto planckoutD = output_nc.add_variable<TF>("planckD" , {"gpt","lev", "col"});
+    planckoutD.insert(myplkD.v(),{0,0,0});
 }
 
 int main()
@@ -634,7 +602,7 @@ int main()
     {
         master.start();
         master.init();
-
+        
         solve_radiation<FLOAT_TYPE>(master);
     }
 

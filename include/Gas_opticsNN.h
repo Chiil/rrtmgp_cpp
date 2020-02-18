@@ -26,14 +26,12 @@ class Gas_opticsNN : public Optical_props<TF>
     public:
         // Constructor for longwave variant.
         Gas_opticsNN(
-                const Array<std::string,1>& plan_files,
                 const Array<std::string,1>& gas_names,
                 const Array<int,2>& band2gpt,
                 const Array<TF,2>& band_lims_wavenum);
 
         // Constructor for shortwave variant.
         Gas_opticsNN(
-                const Array<std::string,1>& plan_files,
                 const Array<std::string,1>& gas_names,
                 const Array<int,2>& band2gpt,
                 const Array<TF,2>& band_lims_wavenum,
@@ -49,7 +47,9 @@ class Gas_opticsNN : public Optical_props<TF>
                 const Gas_concs<TF>& gas_desc,
                 std::unique_ptr<Optical_props_arry<TF>>& optical_props,
                 Source_func_lw<TF>& sources,
-                const Array<TF,2>& tlev) const;
+                const Array<TF,2>& tlev,
+                const int idx_tropo, 
+                const int ninput) const;
 
         // Shortwave variant.
         void gas_optics(
@@ -60,7 +60,9 @@ class Gas_opticsNN : public Optical_props<TF>
                 std::unique_ptr<Optical_props_arry<TF>>& optical_props,
                 Array<TF,2>& toa_src,
                 Network& SSA,
-                Network& TSW) const;
+                Network& TSW,
+                const int idx_tropo, 
+                const int ninput) const;
 
     private:
         const TF press_ref_trop = 9948.431564193395; //network is trained on this, so might as well hardcode it
@@ -71,7 +73,8 @@ class Gas_opticsNN : public Optical_props<TF>
         void compute_tau_ssa_NN(
                 Network& SSA,
                 Network& TSW,
-                const int ncol, const int nlay, const int ngpt, const int nband,
+                const int ncol, const int nlay, const int ngpt, const int nband, 
+                const int idx_tropo, const int ninput,
                 const double* restrict const play,
                 const double* restrict const plev,
                 const double* restrict const tlay,
@@ -79,7 +82,8 @@ class Gas_opticsNN : public Optical_props<TF>
                 std::unique_ptr<Optical_props_arry<TF>>& optical_props) const;
 
         void compute_tau_sources_NN(Network& TLW,Network& PLK,
-                const int ncol, const int nlay, const int nband, const int ngpt,
+                const int ncol, const int nlay, const int ngpt, const int nband, 
+                const int idx_tropo, const int ninput,
                 const double* restrict const play, 
                 const double* restrict const plev,
                 const double* restrict const tlay, 
