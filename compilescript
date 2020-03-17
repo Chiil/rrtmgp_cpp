@@ -1,27 +1,16 @@
 module purge
-#module load surf-devel
 module load pre2019
 module load compilerwrappers
 module load impi/2017.3.196-iccifort-2017.4.196-GCC-6.4.0-2.28
 module load surfsara
-sleep 1.
-#module load c/intel/18.0.2
-#module load fortran/intel/18.0.2
 module load netCDF-C++4/4.3.0-foss-2017b
 module load netCDF-Fortran/4.4.4-foss-2017b
 module load cmake
-sleep 1.
 module load Boost/1.65.1-foss-2017b
 module load imkl/2017.3.196-iimpi-2017b
-#module load CUDA/10.0.130
-#module load cuDNN/7.3.1-CUDA-10.0.130
-sleep 1.
-#module load NCCL/2.3.5-CUDA-10.0.130
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/mveerman/TensorRT-5.0.2.6/lib
 
-#rm -rf build
-#mkdir build
 cd build
 cmake .. -DSYST=cartesius 
-make -j
+make 
 cd ..

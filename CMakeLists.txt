@@ -48,8 +48,6 @@ if(WITH_TENSORRT)
     include_directories("$ENV{TensorRT_PATH}/include")
 endif(WITH_TENSORRT)
 
-
-
 # Load system specific settings if not set, force default.cmake.
 if(NOT SYST)
   set(SYST default)

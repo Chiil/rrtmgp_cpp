@@ -63,6 +63,9 @@ else()
 #  target_link_libraries(test_rcemipNN rrtmgp ${LIBS} m)
 
   #Training data generation (no fluxes) 
+  add_executable(rico test_rico2D.cpp)
+  target_link_libraries(rico rrtmgp ${LIBS} m)
+
   add_executable(sampling sampling.cpp)
   target_link_libraries(sampling rrtmgp ${LIBS} m)
 

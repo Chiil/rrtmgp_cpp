@@ -6,7 +6,8 @@
 #include <fstream>
 #include <vector>
 #include <iostream>
-#include <Network.h>
+#include "Netcdf_interface.h"
+#include "Network.h"
 #include <mkl.h>
 #include <time.h>
 #include <sys/time.h>
@@ -24,9 +25,9 @@ namespace
         return (double)time.tv_sec + (double)time.tv_usec * .000001;
     }
     double mystart,myend;
-    constexpr int N_layI=4;
-    constexpr int N_lay1=64;
-    constexpr int N_lay2=64;
+//    constexpr int N_layI=4;
+//    constexpr int N_lay1=64;
+//    constexpr int N_lay2=64;
 
     extern "C" void cblas_sgemm(
     const  CBLAS_ORDER, const  CBLAS_TRANSPOSE, const  CBLAS_TRANSPOSE, const int, const int, const int,
@@ -44,18 +45,6 @@ namespace
             }
     }
 
-    void transpose(float* restrict matrix, const int Ncol, const int Nrow)
-    {
-        float tmp[Ncol*Nrow];
-        for (int i = 0; i < Ncol; ++i)
-            for (int j = 0; j < Nrow; ++j)
-                tmp[j+i*Nrow] = matrix[i+j*Ncol];
-            
-        for (int i = 0; i < Ncol; ++i)
-            for (int j = 0; j < Nrow; ++j)
-                matrix[j+i*Nrow] = tmp[j+i*Nrow];
-    }
-
     void matmul_bias_act_blas(
             const int Nbatch,
             const int Nrow, 
@@ -66,41 +55,9 @@ namespace
             float* restrict const layer_out,
             const int trans)
     {
-        if (trans==1)
-        {
-            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, Nrow,Nbatch,Ncol,1.,weights,Ncol,layer_in,Ncol ,0.,layer_out,Nbatch);       
-        } else {
-            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, Nrow,Nbatch,Ncol,1.,weights,Ncol,layer_in,Nbatch ,0.,layer_out,Nbatch);       
-        }
+//        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, Nrow,Nbatch,Ncol,1.,weights,Ncol,layer_in,Ncol ,0.,layer_out,Nbatch);       
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, Nrow,Nbatch,Ncol,1.,weights,Ncol,layer_in,Nbatch ,0.,layer_out,Nbatch);       
         bias_and_activate(layer_out,bias,Nrow,Nbatch);
-    }        		
-
-
-    void matmul_leakyrelu(
-            const int Nbatch,
-            const int Nrow, 
-            const int Ncol, 
-            const float* restrict weights,
-            const float* restrict bias,
-            float* restrict const layer_in,
-            float* restrict const layer_out)
-    {
-        for (int i=0; i<Nbatch; ++i)
-        {
-            for (int j=0; j<Nrow; ++j)
-            {
-                const int layidx=j + i * Nrow;
-                layer_out[layidx] = 0.;
-                for (int k=0; k<Ncol; ++k)
-                {
-                    const int wgtidx = k + j * Ncol;
-                    const int inpidx = k + i * Ncol;
-                    layer_out[layidx] += weights[wgtidx] * layer_in[inpidx];
-                }
-                layer_out[layidx] += bias[j];
-                layer_out[layidx] = std::max(0.2f * layer_out[layidx], layer_out[layidx]);
-            }
-        }
     }        		
 
     inline float faster_but_inaccurate_exp(float x) 
@@ -110,6 +67,7 @@ namespace
         return x;
     }
 
+    template<int Nlayer,int N_lay1,int N_lay2,int N_lay3>
     void normalize_input(
             float* restrict const input, 
             const float* restrict const input_mean,
@@ -128,6 +86,7 @@ namespace
         }   
     }
 
+    template<int Nlayer,int N_lay1,int N_lay2,int N_lay3>
     void Feedforward(
             float* restrict const input, 
             float* restrict const output,
@@ -152,9 +111,28 @@ namespace
     {  
         if (do_inpnorm) {normalize_input(input,input_mean,input_stdev,Nbatch,N_layI);}
 
-        matmul_bias_act_blas(Nbatch,N_lay1,N_layI,layer1_wgth,layer1_bias,input,layer1,0);
-        matmul_bias_act_blas(Nbatch,N_lay2,N_lay1,layer2_wgth,layer2_bias,layer1,layer2,0);
-        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N_layO,Nbatch,N_lay2,1.,output_wgth,N_lay2,layer2,Nbatch,0.,output,Nbatch);
+        if constexpr (Nlayer==0)
+        {   
+            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N_layO,Nbatch,N_layI,1.,output_wgth,N_layI,input,Nbatch,0.,output,Nbatch);
+        }
+        if constexpr (Nlayer==1)
+        {   
+            matmul_bias_act_blas(Nbatch,N_lay1,N_layI,layer1_wgth,layer1_bias,input,layer1,0);
+            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N_layO,Nbatch,N_lay1,1.,output_wgth,N_lay1,layer1,Nbatch,0.,output,Nbatch);
+        }
+        if constexpr (Nlayer==2)
+        {   
+            matmul_bias_act_blas(Nbatch,N_lay1,N_layI,layer1_wgth,layer1_bias,input,layer1,0);
+            matmul_bias_act_blas(Nbatch,N_lay2,N_lay1,layer2_wgth,layer2_bias,layer1,layer2,0);
+            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N_layO,Nbatch,N_lay2,1.,output_wgth,N_lay2,layer2,Nbatch,0.,output,Nbatch);
+        }
+        if constexpr (Nlayer==3)
+        {   
+            matmul_bias_act_blas(Nbatch,N_lay1,N_layI,layer1_wgth,layer1_bias,input,layer1,0);
+            matmul_bias_act_blas(Nbatch,N_lay2,N_lay1,layer2_wgth,layer2_bias,layer1,layer2,0);
+            matmul_bias_act_blas(Nbatch,N_lay3,N_lay2,layer3_wgth,layer3_bias,layer2,layer3,0);
+            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, N_layO,Nbatch,N_lay3,1.,output_wgth,N_lay3,layer3,Nbatch,0.,output,Nbatch);
+        }
 
         //output layer and denormalize
         if (do_exp == 1)
@@ -182,21 +160,8 @@ namespace
     }
 }
 
-
-
-void Network::file_reader(
-        float* weights,
-        const std::string& filename,
-        const int N)
-{
-    std::ifstream file (filename.c_str());
-    file.is_open();
-    for ( int i=0; i<N;++i)
-        file>> weights[i];
-    file.close();
-}
-
-void Network::Inference(
+template<int Nlayer,int N_lay1,int N_lay2,int N_lay3>
+void Network<Nlayer,N_lay1,N_lay2,N_lay3>::Inference(
         float* inputs,
         float* outputs,
         const int lower_atmos,
@@ -255,55 +220,129 @@ void Network::Inference(
 }
 
 
-Network::Network(const int Nbatch_lower,const int Nbatch_upper,
-                 const std::vector<float>& bias1_lower,
-                 const std::vector<float>& bias2_lower,
-                 const std::vector<float>& bias3_lower,
-                 const std::vector<float>& wgth1_lower,
-                 const std::vector<float>& wgth2_lower,
-                 const std::vector<float>& wgth3_lower,
-                 const std::vector<float>& Fmean_lower,
-                 const std::vector<float>& Fstdv_lower,
-                 const std::vector<float>& Lmean_lower,
-                 const std::vector<float>& Lstdv_lower,
-                 const std::vector<float>& bias1_upper,
-                 const std::vector<float>& bias2_upper,
-                 const std::vector<float>& bias3_upper,
-                 const std::vector<float>& wgth1_upper,
-                 const std::vector<float>& wgth2_upper,
-                 const std::vector<float>& wgth3_upper,
-                 const std::vector<float>& Fmean_upper,
-                 const std::vector<float>& Fstdv_upper,
-                 const std::vector<float>& Lmean_upper,
-                 const std::vector<float>& Lstdv_upper,
-                 const int N_layO,const int N_layI)
+//Network::Network(const int Nbatch_lower,const int Nbatch_upper,
+//                 const std::vector<float>& bias1_lower,
+//                 const std::vector<float>& bias2_lower,
+//                 const std::vector<float>& bias3_lower,
+//                 const std::vector<float>& wgth1_lower,
+//                 const std::vector<float>& wgth2_lower,
+//                 const std::vector<float>& wgth3_lower,
+//                 const std::vector<float>& Fmean_lower,
+//                 const std::vector<float>& Fstdv_lower,
+//                 const std::vector<float>& Lmean_lower,
+//                 const std::vector<float>& Lstdv_lower,
+//                 const std::vector<float>& bias1_upper,
+//                 const std::vector<float>& bias2_upper,
+//                 const std::vector<float>& bias3_upper,
+//                 const std::vector<float>& wgth1_upper,
+//                 const std::vector<float>& wgth2_upper,
+//                 const std::vector<float>& wgth3_upper,
+//                 const std::vector<float>& Fmean_upper,
+//                 const std::vector<float>& Fstdv_upper,
+//                 const std::vector<float>& Lmean_upper,
+//                 const std::vector<float>& Lstdv_upper,
+//                 const int N_layO,const int N_layI)
+//{
+//    this->Nbatch_lower = Nbatch_lower;
+//    this->Nbatch_upper = Nbatch_upper;
+//    this->N_layO = N_layO;
+//    this->N_layI = N_layI;
+//
+//    this->layer1_wgth_lower = wgth1_lower;
+//    this->layer2_wgth_lower = wgth2_lower;
+//    this->output_wgth_lower = wgth3_lower;
+//    this->layer1_bias_lower = bias1_lower;
+//    this->layer2_bias_lower = bias2_lower;
+//    this->output_bias_lower = bias3_lower;
+//    this->mean_input_lower = Fmean_lower;
+//    this->stdev_input_lower = Fstdv_lower;
+//    this->mean_output_lower = Lmean_lower;
+//    this->stdev_output_lower = Lstdv_lower;
+//
+//    this->layer1_wgth_upper = wgth1_upper;
+//    this->layer2_wgth_upper = wgth2_upper;
+//    this->output_wgth_upper = wgth3_upper;
+//    this->layer1_bias_upper = bias1_upper;
+//    this->layer2_bias_upper = bias2_upper;
+//    this->output_bias_upper = bias3_upper;
+//    this->mean_input_upper = Fmean_upper;
+//    this->stdev_input_upper = Fstdv_upper;
+//    this->mean_output_upper = Lmean_upper;
+//    this->stdev_output_upper = Lstdv_upper;
+//}
+template<int Nlayer,int N_lay1,int N_lay2,int N_lay3>
+Network<Nlayer,N_lay1,N_lay2,N_lay3>::Network(const int Nbatch_lower,const int Nbatch_upper,
+                 Netcdf_group grp,const int N_layO,const int N_layI)//change to pointer?????
 {
     this->Nbatch_lower = Nbatch_lower;
     this->Nbatch_upper = Nbatch_upper;
     this->N_layO = N_layO;
     this->N_layI = N_layI;
 
-    this->layer1_wgth_lower = wgth1_lower;
-    this->layer2_wgth_lower = wgth2_lower;
-    this->output_wgth_lower = wgth3_lower;
-    this->layer1_bias_lower = bias1_lower;
-    this->layer2_bias_lower = bias2_lower;
-    this->output_bias_lower = bias3_lower;
-    this->mean_input_lower = Fmean_lower;
-    this->stdev_input_lower = Fstdv_lower;
-    this->mean_output_lower = Lmean_lower;
-    this->stdev_output_lower = Lstdv_lower;
+    if constexpr (Nlayer == 0)
+    {
+        this->output_bias_lower = grp.get_variable<float>("bias1_lower",{N_layO});
+        this->output_wgth_lower = grp.get_variable<float>("wgth1_lower",{N_layO,N_layI});
+        this->output_bias_upper = grp.get_variable<float>("bias1_upper",{N_layO});
+        this->output_wgth_upper = grp.get_variable<float>("wgth1_upper",{N_layO,N_layI});
+    }
+    else if constexpr (Nlayer == 1)
+    {
+        this->layer1_bias_lower = grp.get_variable<float>("bias1_lower",{N_lay1});
+        this->output_bias_lower = grp.get_variable<float>("bias2_lower",{N_layO});
+        this->layer1_wgth_lower = grp.get_variable<float>("wgth1_lower",{N_lay1,N_layI});
+        this->output_wgth_lower = grp.get_variable<float>("wgth2_lower",{N_layO,N_lay1});
+        this->layer1_bias_upper = grp.get_variable<float>("bias1_upper",{N_lay1});
+        this->output_bias_upper = grp.get_variable<float>("bias2_upper",{N_layO});
+        this->layer1_wgth_upper = grp.get_variable<float>("wgth1_upper",{N_lay1,N_layI});
+        this->output_wgth_upper = grp.get_variable<float>("wgth2_upper",{N_layO,N_lay1});
+    }
+    else if constexpr (Nlayer == 2)
+    {
+        this->layer1_bias_lower = grp.get_variable<float>("bias1_lower",{N_lay1});
+        this->layer2_bias_lower = grp.get_variable<float>("bias2_lower",{N_lay2});
+        this->output_bias_lower = grp.get_variable<float>("bias3_lower",{N_layO});
+        this->layer1_wgth_lower = grp.get_variable<float>("wgth1_lower",{N_lay1,N_layI});
+        this->layer2_wgth_lower = grp.get_variable<float>("wgth2_lower",{N_lay2,N_lay1});
+        this->output_wgth_lower = grp.get_variable<float>("wgth3_lower",{N_layO,N_lay2});
+        this->layer1_bias_upper = grp.get_variable<float>("bias1_upper",{N_lay1});
+        this->layer2_bias_upper = grp.get_variable<float>("bias2_upper",{N_lay2});
+        this->output_bias_upper = grp.get_variable<float>("bias3_upper",{N_layO});
+        this->layer1_wgth_upper = grp.get_variable<float>("wgth1_upper",{N_lay1,N_layI});
+        this->layer2_wgth_upper = grp.get_variable<float>("wgth2_upper",{N_lay2,N_lay1});
+        this->output_wgth_upper = grp.get_variable<float>("wgth3_upper",{N_layO,N_lay2});
+    }
+    else if constexpr (Nlayer == 3)
+    {
+        this->layer1_bias_lower = grp.get_variable<float>("bias1_lower",{N_lay1});
+        this->layer2_bias_lower = grp.get_variable<float>("bias2_lower",{N_lay2});
+        this->layer2_bias_lower = grp.get_variable<float>("bias3_lower",{N_lay3});
+        this->output_bias_lower = grp.get_variable<float>("bias4_lower",{N_layO});
+        this->layer1_wgth_lower = grp.get_variable<float>("wgth1_lower",{N_lay1,N_layI});
+        this->layer2_wgth_lower = grp.get_variable<float>("wgth2_lower",{N_lay2,N_lay1});
+        this->layer2_wgth_lower = grp.get_variable<float>("wgth3_lower",{N_lay3,N_lay2});
+        this->output_wgth_lower = grp.get_variable<float>("wgth4_lower",{N_layO,N_lay3});
+        this->layer1_bias_upper = grp.get_variable<float>("bias1_upper",{N_lay1});
+        this->layer2_bias_upper = grp.get_variable<float>("bias2_upper",{N_lay2});
+        this->layer2_bias_upper = grp.get_variable<float>("bias3_upper",{N_lay3});
+        this->output_bias_upper = grp.get_variable<float>("bias4_upper",{N_layO});
+        this->layer1_wgth_upper = grp.get_variable<float>("wgth1_upper",{N_lay1,N_layI});
+        this->layer2_wgth_upper = grp.get_variable<float>("wgth2_upper",{N_lay2,N_lay1});
+        this->layer2_wgth_upper = grp.get_variable<float>("wgth3_upper",{N_lay3,N_lay2});
+        this->output_wgth_upper = grp.get_variable<float>("wgth4_upper",{N_layO,N_lay3});
+    }
 
-    this->layer1_wgth_upper = wgth1_upper;
-    this->layer2_wgth_upper = wgth2_upper;
-    this->output_wgth_upper = wgth3_upper;
-    this->layer1_bias_upper = bias1_upper;
-    this->layer2_bias_upper = bias2_upper;
-    this->output_bias_upper = bias3_upper;
-    this->mean_input_upper = Fmean_upper;
-    this->stdev_input_upper = Fstdv_upper;
-    this->mean_output_upper = Lmean_upper;
-    this->stdev_output_upper = Lstdv_upper;
+
+    this->mean_input_lower   = grp.get_variables<float>("Fmean_lower",{N_layI});
+    this->stdev_input_lower  = grp.get_variables<float>("Fstdv_lower",{N_layI});
+    this->mean_output_lower  = grp.get_variables<float>("Lmean_lower",{N_layO});
+    this->stdev_output_lower = grp.get_variables<float>("Lstdv_lower",{N_layO});
+    
+    this->mean_input_upper   = grp.get_variables<float>("Fmean_upper",{N_layI});
+    this->stdev_input_upper  = grp.get_variables<float>("Fstdv_upper",{N_layI});
+    this->mean_output_upper  = grp.get_variables<float>("Lmean_upper",{N_layO});
+    this->stdev_output_upper = grp.get_variables<float>("Lstdv_upper",{N_layO});
+
 }
 
 

@@ -20,7 +20,8 @@ template<typename TF> class Optical_props_arry;
 template<typename TF> class Gas_concs;
 template<typename TF> class Source_func_lw;
 
-template<typename TF>
+//template<typename TF>
+template<typename TF,int Nlayer,int N_lay1,int N_lay2,int N_lay3>
 class Gas_opticsNN : public Optical_props<TF>
 {
     public:
@@ -39,7 +40,9 @@ class Gas_opticsNN : public Optical_props<TF>
                 const bool do_taussa);
 
         // Longwave variant.
-        void gas_optics(Network& TLW,Network& PLK,
+        void gas_optics(
+                Network<Nlayer,N_lay1,N_lay2,N_lay3>& TLW,
+                Network<Nlayer,N_lay1,N_lay2,N_lay3>& PLK,
                 const Array<TF,2>& play,
                 const Array<TF,2>& plev,
                 const Array<TF,2>& tlay,
@@ -53,14 +56,14 @@ class Gas_opticsNN : public Optical_props<TF>
 
         // Shortwave variant.
         void gas_optics(
+                Network<Nlayer,N_lay1,N_lay2,N_lay3>& SSA,
+                Network<Nlayer,N_lay1,N_lay2,N_lay3>& TSW,
                 const Array<TF,2>& play,
                 const Array<TF,2>& plev,
                 const Array<TF,2>& tlay,
                 const Gas_concs<TF>& gas_desc,
                 std::unique_ptr<Optical_props_arry<TF>>& optical_props,
                 Array<TF,2>& toa_src,
-                Network& SSA,
-                Network& TSW,
                 const int idx_tropo, 
                 const int ninput) const;
 
@@ -71,8 +74,8 @@ class Gas_opticsNN : public Optical_props<TF>
         Array<std::string,1> gas_names;
         Array<TF,1> solar_src;
         void compute_tau_ssa_NN(
-                Network& SSA,
-                Network& TSW,
+                Network<Nlayer,N_lay1,N_lay2,N_lay3>& SSA,
+                Network<Nlayer,N_lay1,N_lay2,N_lay3>& TSW,
                 const int ncol, const int nlay, const int ngpt, const int nband, 
                 const int idx_tropo, const int ninput,
                 const double* restrict const play,
@@ -81,7 +84,9 @@ class Gas_opticsNN : public Optical_props<TF>
                 const Gas_concs<TF>& gas_desc,
                 std::unique_ptr<Optical_props_arry<TF>>& optical_props) const;
 
-        void compute_tau_sources_NN(Network& TLW,Network& PLK,
+        void compute_tau_sources_NN(
+                Network<Nlayer,N_lay1,N_lay2,N_lay3>& TLW,
+                Network<Nlayer,N_lay1,N_lay2,N_lay3>& PLK,
                 const int ncol, const int nlay, const int ngpt, const int nband, 
                 const int idx_tropo, const int ninput,
                 const double* restrict const play, 
