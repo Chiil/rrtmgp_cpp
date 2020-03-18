@@ -34,19 +34,6 @@ if(USEMPI AND USECUDA)
   message(FATAL_ERROR "MPI support for CUDA runs is not supported yet.")
 endif()
 
-#Link to TensorRT
-option(WITH_TENSORRT "Include TensorRT for the Neural Network solver for optical properties" ON)
-if(WITH_TENSORRT)
-    if(NOT DEFINED ENV{TensorRT_PATH})
-    message(STATUS "Congratulations, you made the correct decision to use our Neural Network solver")
-    message(STATUS "Please set environment variable TensorRT_PATH to the location where TensorRT is installed")
-    message(STATUS "e.g. export TensorRT_PATH=\"/home/<user>/TensorRT-5.0.2.6\"")
-    endif(NOT DEFINED ENV{TensorRT_PATH})
-
-    include_directories("$ENV{TensorRT_PATH}/samples/common")
-    link_directories("$ENV{TensorRT_PATH}/lib")
-    include_directories("$ENV{TensorRT_PATH}/include")
-endif(WITH_TENSORRT)
 
 # Load system specific settings if not set, force default.cmake.
 if(NOT SYST)
