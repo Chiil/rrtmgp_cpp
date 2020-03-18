@@ -88,18 +88,18 @@ class Master
 };
 
 // Implementation below
-Master::Master()
+inline Master::Master()
 {
     initialized = false;
     allocated   = false;
 }
 
-Master::~Master()
+inline Master::~Master()
 {
     print_message("Finished run on %d processes\n", md.nprocs);
 }
 
-void Master::start()
+inline void Master::start()
 {
     initialized = true;
 
@@ -111,7 +111,7 @@ void Master::start()
     print_message("Starting run on %d processes\n", md.nprocs);
 }
 
-void Master::init()
+inline void Master::init()
 {
     md.npx = 1;
     md.npy = 1;
@@ -124,20 +124,20 @@ void Master::init()
 }
 
 // All broadcasts return directly, because there is nothing to broadcast.
-void Master::broadcast(char* data, int datasize, int mpiid_to_write) {}
-void Master::broadcast(int* data, int datasize, int mpiid_to_write) {}
-void Master::broadcast(unsigned long* data, int datasize, int mpiid_to_write) {}
-void Master::broadcast(double* data, int datasize, int mpiid_to_write) {}
-void Master::broadcast(float* data, int datasize, int mpiid_to_write) {}
-void Master::sum(int* var, int datasize) {}
-void Master::sum(double* var, int datasize) {}
-void Master::sum(float* var, int datasize) {}
-void Master::max(double* var, int datasize) {}
-void Master::max(float* var, int datasize) {}
-void Master::min(double* var, int datasize) {}
-void Master::min(float* var, int datasize) {}
+inline void Master::broadcast(char* data, int datasize, int mpiid_to_write) {}
+inline void Master::broadcast(int* data, int datasize, int mpiid_to_write) {}
+inline void Master::broadcast(unsigned long* data, int datasize, int mpiid_to_write) {}
+inline void Master::broadcast(double* data, int datasize, int mpiid_to_write) {}
+inline void Master::broadcast(float* data, int datasize, int mpiid_to_write) {}
+inline void Master::sum(int* var, int datasize) {}
+inline void Master::sum(double* var, int datasize) {}
+inline void Master::sum(float* var, int datasize) {}
+inline void Master::max(double* var, int datasize) {}
+inline void Master::max(float* var, int datasize) {}
+inline void Master::min(double* var, int datasize) {}
+inline void Master::min(float* var, int datasize) {}
 
-void Master::print_message(const char *format, ...)
+inline void Master::print_message(const char *format, ...)
 {
     if (md.mpiid == 0)
     {
@@ -148,19 +148,19 @@ void Master::print_message(const char *format, ...)
     }
 }
 
-void Master::print_message(const std::ostringstream& ss)
+inline void Master::print_message(const std::ostringstream& ss)
 {
     if (md.mpiid == 0)
         std::cout << ss.str();
 }
 
-void Master::print_message(const std::string& s)
+inline void Master::print_message(const std::string& s)
 {
     if (md.mpiid == 0)
         std::cout << s << std::endl;
 }
 
-void Master::print_warning(const char *format, ...)
+inline void Master::print_warning(const char *format, ...)
 {
     std::string warningstr("WARNING: ");
     warningstr += std::string(format);
@@ -176,19 +176,19 @@ void Master::print_warning(const char *format, ...)
     }
 }
 
-void Master::print_warning(const std::ostringstream& ss)
+inline void Master::print_warning(const std::ostringstream& ss)
 {
     if (md.mpiid == 0)
         std::cout << "WARNING: " << ss.str();
 }
 
-void Master::print_warning(const std::string& s)
+inline void Master::print_warning(const std::string& s)
 {
     if (md.mpiid == 0)
         std::cout << "WARNING: " << s << std::endl;
 }
 
-void Master::print_error(const char *format, ...)
+inline void Master::print_error(const char *format, ...)
 {
     std::string errorstr("ERROR: ");
     errorstr += std::string(format);
