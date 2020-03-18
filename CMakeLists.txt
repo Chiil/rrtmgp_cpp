@@ -90,6 +90,27 @@ else()
   message(STATUS "CUDA: Disabled.")
 endif()
 
+if(NUMBER_LAYERS) 
+add_definitions("-DNUMBER_LAYERS=${NUMBER_LAYERS}") 
+endif()
+
+if(NODES_LAYER_IN) 
+add_definitions("-DNODES_LAYER_IN=${NODES_LAYER_IN}") 
+endif()
+
+if(NODES_LAYER_1) 
+add_definitions("-DNODES_LAYER_1=${NODES_LAYER_1}") 
+endif()
+
+if(NODES_LAYER_2) 
+add_definitions("-DNODES_LAYER_2=${NODES_LAYER_2}") 
+endif()
+
+if(NODES_LAYER_3) 
+add_definitions("-DNODES_LAYER_3=${NODES_LAYER_3}") 
+endif()
+
+
 # Only set the compiler flags when the cache is created
 # to enable editing of the flags in the CMakeCache.txt file.
 if(NOT HASCACHE)
