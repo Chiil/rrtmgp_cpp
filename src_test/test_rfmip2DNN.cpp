@@ -90,8 +90,8 @@ namespace
         return var;
     }
 
-    template<typename TF,int Nlayer,int N_lay1,int N_lay2,int N_lay3>
-    Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3> load_and_init_gas_opticsNNSW(
+    template<typename TF,int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
+    Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3> load_and_init_gas_opticsNNSW(
             Master& master,
             const Gas_concs<TF>& gas_concs,
             const std::string& coef_file,
@@ -109,7 +109,7 @@ namespace
         Array<int,2> band2gpt(coef_nc.get_variable<int>("bnd_limits_gpt", {n_bnds, 2}), {2, n_bnds});
         Array<TF,1> solar_src(
                 coef_nc.get_variable<TF>("solar_source", {n_gpts}), {n_gpts});
-        return Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>(
+        return Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3>(
                 gas_names,
                 band2gpt,
                 band_lims,
@@ -117,12 +117,11 @@ namespace
                 do_taussa);
     }
 
-    template<typename TF,int Nlayer,int N_lay1,int N_lay2,int N_lay3>
-    Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3> load_and_init_gas_opticsNNLW(
+    template<typename TF,int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
+    Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3> load_and_init_gas_opticsNNLW(
             Master& master,
             const Gas_concs<TF>& gas_concs,
             const std::string& coef_file)
-    //        const int Nlayer,const int N_lay1, const int N_lay2, const int N_lay3)
     {
         // READ THE COEFFICIENTS FOR THE OPTICAL SOLVER.
         Netcdf_file coef_nc(master, coef_file, Netcdf_mode::Read);
@@ -134,7 +133,7 @@ namespace
                 get_variable_string("gas_names", {n_absorbers}, coef_nc, n_char, true), {n_absorbers});
         Array<TF,2> band_lims(coef_nc.get_variable<TF>("bnd_limits_wavenumber", {n_bnds, 2}), {2, n_bnds});
         Array<int,2> band2gpt(coef_nc.get_variable<int>("bnd_limits_gpt", {n_bnds, 2}), {2, n_bnds});
-        return Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>(
+        return Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3>(
                 gas_names,
                 band2gpt,
                 band_lims);
@@ -178,15 +177,6 @@ void get_tropo_idx(Netcdf_file& file_nc, int& idx_tropo, int& idxlower, int& idx
 template<typename TF>
 void solve_radiation(Master& master)
 {
-    constexpr int NlayI =4;
-    constexpr int Nlayer = 2; //number of layers used
-    constexpr int Nlay1 =64; //nodes in first layer (if used)
-    constexpr int Nlay2 =64; //nodes in second layer (if used)
-    constexpr int Nlay3 =0;  //nodes in third layer (if used)
-
-    constexpr int NlayOlw=256;
-    constexpr int NlayOlwp=768;
-    constexpr int NlayOsw=224;
     //input output files
     Netcdf_file file_nc(master, "test_rcemip_input2D.nc", Netcdf_mode::Read);
     Netcdf_file output_file(master, "Flux+OptProp.nc", Netcdf_mode::Create);
@@ -202,122 +192,32 @@ void solve_radiation(Master& master)
     int idxupper;
     get_tropo_idx<TF>(file_nc, idx_tropo, idxlower, idxupper);
 
+    std::cout<<"Using "<<Nlayer<<" hidden layers"<<std::endl;
+    if constexpr (Nlayer==1) std::cout<<"Nodes: "<<Nlay1<<std::endl;
+    if constexpr (Nlayer==2) std::cout<<"Nodes: "<<Nlay1<<", "<<Nlay2<<std::endl;
+    if constexpr (Nlayer==3) std::cout<<"Nodes: "<<Nlay1<<", "<<Nlay2<<", "<<Nlay3<<std::endl;
+    
     //read weights                    
     Netcdf_file NcFile(master, "weights.nc", Netcdf_mode::Read);    
-    //const int N_layI = NcFile.get_dimension_size("N_input");
-    //#include "Network_loaders.h"
 
     Netcdf_group tlwnc = NcFile.get_group("TLW");
-    Network<Nlayer,Nlay1,Nlay2,Nlay3>TLW(idxlower,idxupper,
-                                                      tlwnc,NlayOlw,NlayI);
+    Network<Nlayer,NlayI,Nlay1,Nlay2,Nlay3>TLW(idxlower,idxupper,
+                                                      tlwnc,NlayOlw);
     Netcdf_group plknc = NcFile.get_group("Planck");
-    Network<Nlayer,Nlay1,Nlay2,Nlay3>PLK(idxlower,idxupper,
-                                                      plknc,NlayOlw+2,NlayI);
+    Network<Nlayer,NlayI,Nlay1,Nlay2,Nlay3>PLK(idxlower,idxupper,
+                                                      plknc,NlayOlw+2);
     Netcdf_group tswnc = NcFile.get_group("TSW");
-    Network<Nlayer,Nlay1,Nlay2,Nlay3>TSW(idxlower,idxupper,
-                                                      tswnc,NlayOsw,NlayI);
+    Network<Nlayer,NlayI,Nlay1,Nlay2,Nlay3>TSW(idxlower,idxupper,
+                                                      tswnc,NlayOsw);
     Netcdf_group ssanc = NcFile.get_group("SSA");
-    Network<Nlayer,Nlay1,Nlay2,Nlay3>SSA(idxlower,idxupper,
-                                                      ssanc,NlayOsw,NlayI);
-   //             tlwnc.get_variable<float>("bias1_lower",{N_lay1}),
-   //             tlwnc.get_variable<float>("bias2_lower",{N_lay2}),
-   //             tlwnc.get_variable<float>("bias3_lower",{N_layOlw}),
-   //             tlwnc.get_variable<float>("wgth1_lower",{N_lay1,  N_layI}),
-   //             tlwnc.get_variable<float>("wgth2_lower",{N_lay2,  N_lay1}),
-   //             tlwnc.get_variable<float>("wgth3_lower",{N_layOlw,N_lay2}),
-   //             tlwnc.get_variable<float>("Fmean_lower",{N_layI}),
-   //             tlwnc.get_variable<float>("Fstdv_lower",{N_layI}),
-   //             tlwnc.get_variable<float>("Lmean_lower",{N_layOlw}),
-   //             tlwnc.get_variable<float>("Lstdv_lower",{N_layOlw}),
-   //             tlwnc.get_variable<float>("bias1_upper",{N_lay1}),
-   //             tlwnc.get_variable<float>("bias2_upper",{N_lay2}),
-   //             tlwnc.get_variable<float>("bias3_upper",{N_layOlw}),
-   //             tlwnc.get_variable<float>("wgth1_upper",{N_lay1,  N_layI}),
-   //             tlwnc.get_variable<float>("wgth2_upper",{N_lay2,  N_lay1}),
-   //             tlwnc.get_variable<float>("wgth3_upper",{N_layOlw,N_lay2}),
-   //             tlwnc.get_variable<float>("Fmean_upper",{N_layI}),
-   //             tlwnc.get_variable<float>("Fstdv_upper",{N_layI}),
-   //             tlwnc.get_variable<float>("Lmean_upper",{N_layOlw}),
-   //             tlwnc.get_variable<float>("Lstdv_upper",{N_layOlw}),
-   // 
-   // Netcdf_group plnck = NcFile.get_group("Planck");
-   // Network PLK(idxlower,idxupper,
-   //             plnck.get_variable<float>("bias1_lower",{N_lay1}),
-   //             plnck.get_variable<float>("bias2_lower",{N_lay2}),
-   //             plnck.get_variable<float>("bias3_lower",{N_layOlwp}),
-   //             plnck.get_variable<float>("wgth1_lower",{N_lay1,  N_layI+2}),
-   //             plnck.get_variable<float>("wgth2_lower",{N_lay2,  N_lay1}),
-   //             plnck.get_variable<float>("wgth3_lower",{N_layOlwp,N_lay2}),
-   //             plnck.get_variable<float>("Fmean_lower",{N_layI+2}),
-   //             plnck.get_variable<float>("Fstdv_lower",{N_layI+2}),
-   //             plnck.get_variable<float>("Lmean_lower",{N_layOlwp}),
-   //             plnck.get_variable<float>("Lstdv_lower",{N_layOlwp}),
-   //             plnck.get_variable<float>("bias1_upper",{N_lay1}),
-   //             plnck.get_variable<float>("bias2_upper",{N_lay2}),
-   //             plnck.get_variable<float>("bias3_upper",{N_layOlwp}),
-   //             plnck.get_variable<float>("wgth1_upper",{N_lay1,  N_layI+2}),
-   //             plnck.get_variable<float>("wgth2_upper",{N_lay2,  N_lay1}),
-   //             plnck.get_variable<float>("wgth3_upper",{N_layOlwp,N_lay2}),
-   //             plnck.get_variable<float>("Fmean_upper",{N_layI+2}),
-   //             plnck.get_variable<float>("Fstdv_upper",{N_layI+2}),
-   //             plnck.get_variable<float>("Lmean_upper",{N_layOlwp}),
-   //             plnck.get_variable<float>("Lstdv_upper",{N_layOlwp}),
-   //             N_layOlwp,N_layI+2);
-
-   // Netcdf_group ssanc = NcFile.get_group("SSA");
-   // Network SSA(idxlower,idxupper,
-   //             ssanc.get_variable<float>("bias1_lower",{N_lay1}),
-   //             ssanc.get_variable<float>("bias2_lower",{N_lay2}),
-   //             ssanc.get_variable<float>("bias3_lower",{N_layOsw}),
-   //             ssanc.get_variable<float>("wgth1_lower",{N_lay1,  N_layI}),
-   //             ssanc.get_variable<float>("wgth2_lower",{N_lay2,  N_lay1}),
-   //             ssanc.get_variable<float>("wgth3_lower",{N_layOsw,N_lay2}),
-   //             ssanc.get_variable<float>("Fmean_lower",{N_layI}),
-   //             ssanc.get_variable<float>("Fstdv_lower",{N_layI}),
-   //             ssanc.get_variable<float>("Lmean_lower",{N_layOsw}),
-   //             ssanc.get_variable<float>("Lstdv_lower",{N_layOsw}),
-   //             ssanc.get_variable<float>("bias1_upper",{N_lay1}),
-   //             ssanc.get_variable<float>("bias2_upper",{N_lay2}),
-   //             ssanc.get_variable<float>("bias3_upper",{N_layOsw}),
-   //             ssanc.get_variable<float>("wgth1_upper",{N_lay1,  N_layI}),
-   //             ssanc.get_variable<float>("wgth2_upper",{N_lay2,  N_lay1}),
-   //             ssanc.get_variable<float>("wgth3_upper",{N_layOsw,N_lay2}),
-   //             ssanc.get_variable<float>("Fmean_upper",{N_layI}),
-   //             ssanc.get_variable<float>("Fstdv_upper",{N_layI}),
-   //             ssanc.get_variable<float>("Lmean_upper",{N_layOsw}),
-   //             ssanc.get_variable<float>("Lstdv_upper",{N_layOsw}),
-   //             N_layOsw,N_layI);
-
-   // Netcdf_group tswnc = NcFile.get_group("TSW");
-   // Network TSW(idxlower,idxupper,
-   //             tswnc.get_variable<float>("bias1_lower",{N_lay1}),
-   //             tswnc.get_variable<float>("bias2_lower",{N_lay2}),
-   //             tswnc.get_variable<float>("bias3_lower",{N_layOsw}),
-   //             tswnc.get_variable<float>("wgth1_lower",{N_lay1,  N_layI}),
-   //             tswnc.get_variable<float>("wgth2_lower",{N_lay2,  N_lay1}),
-   //             tswnc.get_variable<float>("wgth3_lower",{N_layOsw,N_lay2}),
-   //             tswnc.get_variable<float>("Fmean_lower",{N_layI}),
-   //             tswnc.get_variable<float>("Fstdv_lower",{N_layI}),
-   //             tswnc.get_variable<float>("Lmean_lower",{N_layOsw}),
-   //             tswnc.get_variable<float>("Lstdv_lower",{N_layOsw}),
-   //             tswnc.get_variable<float>("bias1_upper",{N_lay1}),
-   //             tswnc.get_variable<float>("bias2_upper",{N_lay2}),
-   //             tswnc.get_variable<float>("bias3_upper",{N_layOsw}),
-   //             tswnc.get_variable<float>("wgth1_upper",{N_lay1,  N_layI}),
-   //             tswnc.get_variable<float>("wgth2_upper",{N_lay2,  N_lay1}),
-   //             tswnc.get_variable<float>("wgth3_upper",{N_layOsw,N_lay2}),
-   //             tswnc.get_variable<float>("Fmean_upper",{N_layI}),
-   //             tswnc.get_variable<float>("Fstdv_upper",{N_layI}),
-   //             tswnc.get_variable<float>("Lmean_upper",{N_layOsw}),
-   //             tswnc.get_variable<float>("Lstdv_upper",{N_layOsw}),
-   //             N_layOsw,N_layI);
-
+    Network<Nlayer,NlayI,Nlay1,Nlay2,Nlay3>SSA(idxlower,idxupper,
+                                                      ssanc,NlayOsw);
 
     // These are the global variables that need to be contained in a class.
     Gas_concs<TF> gas_concs;
 
-    std::unique_ptr<Gas_opticsNN<TF,Nlayer,Nlay1,Nlay2,Nlay3>> kdist_lw;
-    std::unique_ptr<Gas_opticsNN<TF,Nlayer,Nlay1,Nlay2,Nlay3>> kdist_sw;
+    std::unique_ptr<Gas_opticsNN<TF,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>> kdist_lw;
+    std::unique_ptr<Gas_opticsNN<TF,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>> kdist_sw;
     // Input and output files:
 
     for (int iset = 0; iset < n_set; ++iset)
@@ -329,10 +229,10 @@ void solve_radiation(Master& master)
 
 
         load_gas_concs<TF>(gas_concs, input_nc);
-        kdist_lw = std::make_unique<Gas_opticsNN<TF,Nlayer,Nlay1,Nlay2,Nlay3>>(
-                load_and_init_gas_opticsNNLW<TF,Nlayer,Nlay1,Nlay2,Nlay3>(master, gas_concs, "coefficients_lw.nc"));
-        kdist_sw = std::make_unique<Gas_opticsNN<TF,Nlayer,Nlay1,Nlay2,Nlay3>>(
-                load_and_init_gas_opticsNNSW<TF,Nlayer,Nlay1,Nlay2,Nlay3>(master, gas_concs, "coefficients_sw.nc",true)); 
+        kdist_lw = std::make_unique<Gas_opticsNN<TF,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>>(
+                    load_and_init_gas_opticsNNLW<TF,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>(master, gas_concs, "coefficients_lw.nc"));
+        kdist_sw = std::make_unique<Gas_opticsNN<TF,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>>(
+                    load_and_init_gas_opticsNNSW<TF,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>(master, gas_concs, "coefficients_sw.nc",true)); 
 
         // Solve the full column once.
 
@@ -392,8 +292,7 @@ void solve_radiation(Master& master)
                 optical_props_lw,
                 sources,
                 t_lev,
-                idx_tropo,
-                NlayI);
+                idx_tropo);
         endtime = get_wall_time();
         std::cout<<"LONGWAVE: "<<endtime-starttime<<std::endl;
 
@@ -449,8 +348,7 @@ void solve_radiation(Master& master)
                 gas_concs,
                 optical_props_sw,
                 toa_src,
-                idx_tropo,
-                NlayI);
+                idx_tropo);
         endtime = get_wall_time();
         std::cout<<"SHORTWAVE: "<<endtime-starttime<<std::endl;
 

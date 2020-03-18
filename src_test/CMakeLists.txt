@@ -69,4 +69,4 @@ add_definitions(-DGITHASH="${GITHASH}")
 #  add_executable(sampling sampling.cpp)
 #  target_link_libraries(sampling rrtmgp ${LIBS} m)
 
-endif()
+#endif()

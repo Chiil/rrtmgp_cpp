@@ -114,8 +114,8 @@ namespace
        
 //     // Constructor of longwave variant.
 //template<typename TF>
-template<typename TF,int Nlayer,int N_lay1,int N_lay2,int N_lay3>
-Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::Gas_opticsNN(
+template<typename TF,int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
+Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3>::Gas_opticsNN(
         const Array<std::string,1>& gas_names,
         const Array<int,2>& band2gpt,
         const Array<TF,2>& band_lims_wavenum):
@@ -126,8 +126,8 @@ Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::Gas_opticsNN(
 }
 
 // Constructor of the shortwave variant.
-template<typename TF,int Nlayer,int N_lay1,int N_lay2,int N_lay3>
-Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::Gas_opticsNN(
+template<typename TF,int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
+Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3>::Gas_opticsNN(
         const Array<std::string,1>& gas_names,
         const Array<int,2>& band2gpt,
         const Array<TF,2>& band_lims_wavenum,
@@ -144,10 +144,10 @@ Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::Gas_opticsNN(
 
 // Gas optics solver longwave variant.
 //template<typename TF>
-template<typename TF,int Nlayer,int N_lay1,int N_lay2,int N_lay3>
-void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::gas_optics(
-        Network<Nlayer,N_lay1,N_lay2,N_lay3>& TLW,
-        Network<Nlayer,N_lay1,N_lay2,N_lay3>& PLK,
+template<typename TF,int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
+void Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3>::gas_optics(
+        Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>& TLW,
+        Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>& PLK,
         const Array<TF,2>& play,
         const Array<TF,2>& plev,
         const Array<TF,2>& tlay,
@@ -156,7 +156,7 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::gas_optics(
         std::unique_ptr<Optical_props_arry<TF>>& optical_props,
         Source_func_lw<TF>& sources,
         const Array<TF,2>& tlev,
-        const int idx_tropo, const int ninput) const
+        const int idx_tropo) const
 {
     const int ncol = play.dim(1);
     const int nlay = play.dim(2);
@@ -164,8 +164,7 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::gas_optics(
     const int nband = this->get_nband();
 
     compute_tau_sources_NN(TLW, PLK,
-            ncol, nlay, ngpt, nband,
-            idx_tropo, ninput,
+            ncol, nlay, ngpt, nband, idx_tropo, 
             play.ptr(), plev.ptr(), 
             tlay.ptr(), tlev.ptr(),
             gas_desc, sources, 
@@ -177,17 +176,17 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::gas_optics(
 
 // Gas optics solver shortwave variant.
 //template<typename TF>
-template<typename TF,int Nlayer,int N_lay1,int N_lay2,int N_lay3>
-void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::gas_optics(
-        Network<Nlayer,N_lay1,N_lay2,N_lay3>& SSA, 
-        Network<Nlayer,N_lay1,N_lay2,N_lay3>& TSW, 
+template<typename TF,int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
+void Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3>::gas_optics(
+        Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>& SSA, 
+        Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>& TSW, 
         const Array<TF,2>& play,
         const Array<TF,2>& plev,
         const Array<TF,2>& tlay,
         const Gas_concs<TF>& gas_desc,
         std::unique_ptr<Optical_props_arry<TF>>& optical_props,
         Array<TF,2>& toa_src,
-        const int idx_tropo, const int ninput) const
+        const int idx_tropo) const
 
 {   
     const int ncol = play.dim(1);
@@ -196,8 +195,7 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::gas_optics(
     const int nband = this->get_nband();
     compute_tau_ssa_NN(
             SSA,TSW,
-            ncol, nlay, ngpt, nband,
-            idx_tropo, ninput,
+            ncol, nlay, ngpt, nband, idx_tropo, 
             play.ptr(), plev.ptr(), tlay.ptr(), 
             gas_desc, optical_props);
 
@@ -207,8 +205,8 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::gas_optics(
             toa_src({icol, igpt}) = this->solar_src({igpt});
 }
 
-template<typename TF,int Nlayer,int N_lay1,int N_lay2,int N_lay3>
-void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::lay2sfc_factor(
+template<typename TF,int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
+void Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3>::lay2sfc_factor(
         const Array<TF,2>& tlay,
         const Array<TF,1>& tsfc,
         Source_func_lw<TF>& sources,
@@ -249,12 +247,11 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::lay2sfc_factor(
  
 //Neural Network optical property function for shortwave
 //Currently only implemented for atmospheric profilfes ordered bottom-first
-template<typename TF,int Nlayer,int N_lay1,int N_lay2,int N_lay3>
-void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::compute_tau_ssa_NN(
-        Network<Nlayer,N_lay1,N_lay2,N_lay3>& SSA, 
-        Network<Nlayer,N_lay1,N_lay2,N_lay3>& TSW,
-        const int ncol, const int nlay, const int ngpt, const int nband,
-        const int idx_tropo, const int ninput,
+template<typename TF,int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
+void Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3>::compute_tau_ssa_NN(
+        Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>& SSA, 
+        Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>& TSW,
+        const int ncol, const int nlay, const int ngpt, const int nband, const int idx_tropo,
         const double* restrict const play,
         const double* restrict const plev,
         const double* restrict const tlay,
@@ -281,7 +278,7 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::compute_tau_ssa_NN(
 
     //// Lower atmosphere:
     //fill input array  
-    float input_lower[ncol*idx_tropo*ninput];
+    float input_lower[ncol*idx_tropo*N_layI];
     float output_lower_tau[ncol*idx_tropo*ngpt];
     float output_lower_ssa[ncol*idx_tropo*ngpt];
 
@@ -294,7 +291,7 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::compute_tau_ssa_NN(
             input_lower[idx] = val;
         }
     
-    if (ninput == 4)
+    if constexpr (N_layI == 4)
     {
         startidx += ncol * idx_tropo;
         for (int i = 0; i < idx_tropo; ++i)
@@ -335,7 +332,7 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::compute_tau_ssa_NN(
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++     
     //// Upper atmosphere:
     //fill input array
-    float input_upper     [ncol*(nlay-idx_tropo)*ninput];
+    float input_upper     [ncol*(nlay-idx_tropo)*N_layI];
     float output_upper_tau[ncol*(nlay-idx_tropo)*ngpt];
     float output_upper_ssa[ncol*(nlay-idx_tropo)*ngpt];
 
@@ -348,7 +345,7 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::compute_tau_ssa_NN(
             input_upper[idx] = val;
         }
 
-    if (ninput == 4)
+    if constexpr (N_layI == 4)
     {
         startidx += ncol*(nlay-idx_tropo);
         for (int i = idx_tropo; i < nlay; ++i)
@@ -387,12 +384,11 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::compute_tau_ssa_NN(
 
 //Neural Network optical property function for longwave
 //Currently only implemented for atmospheric profilfes ordered bottom-first
-template<typename TF,int Nlayer,int N_lay1,int N_lay2,int N_lay3>
-void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::compute_tau_sources_NN(
-        Network<Nlayer,N_lay1,N_lay2,N_lay3>& TLW,
-        Network<Nlayer,N_lay1,N_lay2,N_lay3>& PLK,
-        const int ncol, const int nlay, const int ngpt, const int nband, 
-        const int idx_tropo, const int ninput,
+template<typename TF,int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
+void Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3>::compute_tau_sources_NN(
+        Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>& TLW,
+        Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>& PLK,
+        const int ncol, const int nlay, const int ngpt, const int nband, const int idx_tropo,
         const double* restrict const play,
         const double* restrict const plev,
         const double* restrict const tlay,
@@ -423,8 +419,8 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::compute_tau_sources_NN(
 
     //// Lower atmosphere:
     //fill input array  
-    float input_lower_tau[ncol*idx_tropo*ninput];
-    float input_lower_plk[ncol*idx_tropo*(ninput+2)];
+    float input_lower_tau[ncol*idx_tropo*N_layI];
+    float input_lower_plk[ncol*idx_tropo*(N_layI+2)];
     float output_lower_tau[ncol*idx_tropo*ngpt];
     float output_lower_plk[ncol*idx_tropo*ngpt*3];
 
@@ -438,7 +434,7 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::compute_tau_sources_NN(
             input_lower_plk[idx] = val;
         }
     
-    if (ninput == 4)
+    if constexpr (N_layI == 4)
     {
         startidx += ncol * idx_tropo;
         for (int i = 0; i < idx_tropo; ++i)
@@ -493,8 +489,8 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::compute_tau_sources_NN(
 
     //// Upper atmosphere:
     //fill input array
-    float input_upper_tau [ncol*(nlay-idx_tropo)*ninput];
-    float input_upper_plk [ncol*(nlay-idx_tropo)*(ninput+2)];
+    float input_upper_tau [ncol*(nlay-idx_tropo)*N_layI];
+    float input_upper_plk [ncol*(nlay-idx_tropo)*(N_layI+2)];
     float output_upper_tau[ncol*(nlay-idx_tropo)*ngpt];
     float output_upper_plk[ncol*(nlay-idx_tropo)*ngpt*3];   
 
@@ -508,7 +504,7 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::compute_tau_sources_NN(
             input_upper_plk[idx] = val;
         }
 
-    if (ninput == 4)
+    if constexpr (N_layI == 4)
     {
         startidx += ncol*(nlay-idx_tropo);
         for (int i = idx_tropo; i < nlay; ++i)
@@ -562,22 +558,9 @@ void Gas_opticsNN<TF,Nlayer,N_lay1,N_lay2,N_lay3>::compute_tau_sources_NN(
     //We swap lvdec and lvinc with respect to neural network training data, which was generated with a top-bottom ordering
 }
 
-
-
-    constexpr int NlayI =4;
-    constexpr int Nlayer = 2; //number of layers used
-    constexpr int Nlay1 =64; //nodes in first layer (if used)
-    constexpr int Nlay2 =64; //nodes in second layer (if used)
-    constexpr int Nlay3 =0;  //nodes in third layer (if used)
-
-    constexpr int NlayOlw=256;
-    constexpr int NlayOlwp=768;
-    constexpr int NlayOsw=224;
-//template<typename TF,int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3,int N_layO>
-
 #ifdef FLOAT_SINGLE_RRTMGP
-template class Gas_opticsNN<float,Nlayer,Nlay1,Nlay2,Nlay3>;
+template class Gas_opticsNN<float,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>;
 #else
-template class Gas_opticsNN<double,Nlayer,Nlay1,Nlay2,Nlay3>;
+template class Gas_opticsNN<double,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>;
 #endif
 
