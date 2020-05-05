@@ -64,12 +64,12 @@ namespace
         return x;
     }
 
-    template<int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
     void normalize_input(
             float* restrict const input, 
             const float* restrict const input_mean,
             const float* restrict const input_stdev,
-            const int Nbatch)
+            const int Nbatch,
+            const int N_layI)
     {
         for (int k=0; k<N_layI; ++k)
         {
@@ -82,7 +82,7 @@ namespace
         }   
     }
 
-    template<int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
+    template<int Nlayer,int N_lay1,int N_lay2,int N_lay3>
     void Feedforward(
             float* restrict const input, 
             float* restrict const output,
@@ -103,11 +103,12 @@ namespace
             float* restrict const layer3,
             const int Nbatch,
             const int N_layO,
+            const int N_layI,
             const int do_exp,
             const int do_inpnorm)
     
     {  
-        if (do_inpnorm) {normalize_input<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>(input,input_mean,input_stdev,Nbatch);}
+        if (do_inpnorm) {normalize_input(input,input_mean,input_stdev,Nbatch,N_layI);}
 
         if constexpr (Nlayer==0)
         {   
@@ -158,8 +159,8 @@ namespace
     }
 }
 
-template<int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
-void Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>::Inference(
+template<int Nlayer,int N_lay1,int N_lay2,int N_lay3>
+void Network<Nlayer,N_lay1,N_lay2,N_lay3>::Inference(
         float* inputs,
         float* outputs,
         const int lower_atmos,
@@ -171,7 +172,7 @@ void Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>::Inference(
         if constexpr (Nlayer>0) this->layer1.resize(N_lay1*this->Nbatch_lower);
         if constexpr (Nlayer>1) this->layer2.resize(N_lay2*this->Nbatch_lower);
         if constexpr (Nlayer>2) this->layer3.resize(N_lay3*this->Nbatch_lower);
-        Feedforward<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>(
+        Feedforward<Nlayer,N_lay1,N_lay2,N_lay3>(
             inputs,
             outputs,
             this->layer1_wgth_lower.data(),
@@ -191,13 +192,14 @@ void Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>::Inference(
             this->layer3.data(),
             this->Nbatch_lower,
             this->N_layO,
+            this->N_layI,
             do_exp,
             do_inpnorm);
     } else {
         if constexpr (Nlayer>0) this->layer1.resize(N_lay1*this->Nbatch_upper);
         if constexpr (Nlayer>1) this->layer2.resize(N_lay2*this->Nbatch_upper);
         if constexpr (Nlayer>2) this->layer3.resize(N_lay3*this->Nbatch_upper);
-        Feedforward<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>(
+        Feedforward<Nlayer,N_lay1,N_lay2,N_lay3>(
             inputs,
             outputs,
             this->layer1_wgth_upper.data(),
@@ -217,20 +219,21 @@ void Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>::Inference(
             this->layer3.data(),
             this->Nbatch_upper,
             this->N_layO,
+            this->N_layI,
             do_exp,
             do_inpnorm);
     }
 
 }
 
-template<int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
-Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>::Network(const int Nbatch_lower,const int Nbatch_upper,
-                 Netcdf_group& grp,const int N_layO)
+template<int Nlayer,int N_lay1,int N_lay2,int N_lay3>
+Network<Nlayer,N_lay1,N_lay2,N_lay3>::Network(const int Nbatch_lower,const int Nbatch_upper,
+                 Netcdf_group& grp,const int N_layO,const int N_layI)
 {
     this->Nbatch_lower = Nbatch_lower;
     this->Nbatch_upper = Nbatch_upper;
     this->N_layO = N_layO;
-
+    this->N_layI = N_layI;
     if constexpr (Nlayer == 0)
     {
         this->output_bias_lower = grp.get_variable<float>("bias1_lower",{N_layO});
@@ -295,7 +298,7 @@ Network<Nlayer,N_layI,N_lay1,N_lay2,N_lay3>::Network(const int Nbatch_lower,cons
 
 }
 
-template class Network<Nlayer,NlayI,Nlay1,Nlay2,Nlay3>;
+template class Network<Nlayer,Nlay1,Nlay2,Nlay3>;
 
 
 

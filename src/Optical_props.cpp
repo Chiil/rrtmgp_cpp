@@ -169,6 +169,18 @@ namespace rrtmgp_kernel_launcher
                 const_cast<TF*>(tau_in.ptr()), const_cast<TF*>(ssa_in.ptr()), const_cast<TF*>(g_in.ptr()),
                 &nbnd, const_cast<int*>(band_lims_gpoint.ptr()));
     }
+
+ template<typename TF> void increment_2stream_by_2stream(
+            int ncol, int nlay, int ngpt,
+            Array<TF,3>& tau_inout, Array<TF,3>& ssa_inout, Array<TF,3>& g_inout,
+            const Array<TF,3>& tau_in, const Array<TF,3>& ssa_in, const Array<TF,3>& g_in)
+    {
+        rrtmgp_kernels::increment_2stream_by_2stream(
+                &ncol, &nlay, &ngpt,
+                tau_inout.ptr(), ssa_inout.ptr(), g_inout.ptr(),
+                const_cast<TF*>(tau_in.ptr()), const_cast<TF*>(ssa_in.ptr()), const_cast<TF*>(g_in.ptr()));
+    }
+
 }
 
 template<typename TF>
@@ -200,7 +212,12 @@ void add_to(Optical_props_2str<TF>& op_inout, const Optical_props_2str<TF>& op_i
     const int ngpt = op_inout.get_ngpt();
 
     if (ngpt == op_in.get_ngpt())
-        throw std::runtime_error("Adding optical properties of the same gpts is not implemented yet");
+    {
+        rrtmgp_kernel_launcher::increment_2stream_by_2stream(
+                ncol, nlay, ngpt,
+                op_inout.get_tau(), op_inout.get_ssa(), op_inout.get_g(),
+                op_in   .get_tau(), op_in   .get_ssa(), op_in   .get_g());
+    }                                            //throw std::runtime_error("Adding optical properties of the same gpts is not implemented yet");
     else
     {
         if (op_in.get_ngpt() != op_inout.get_nband())

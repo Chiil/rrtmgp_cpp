@@ -81,8 +81,8 @@ if(NUMBER_LAYERS)
 add_definitions("-DNUMBER_LAYERS=${NUMBER_LAYERS}") 
 endif()
 
-if(NODES_LAYER_IN) 
-add_definitions("-DNODES_LAYER_IN=${NODES_LAYER_IN}") 
+if(EXTRA_GASES_IN) 
+add_definitions("-DEXTRA_GASES_IN=${EXTRA_GASES_IN}") 
 endif()
 
 if(NODES_LAYER_1) 

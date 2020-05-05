@@ -1,28 +1,20 @@
-module purge
-module load 2019
-module load intel/2019a
-module load netCDF/4.6.1-intel-2018b
-module load netCDF-Fortran/4.4.4-intel-2018b
-module load netCDF-C++4/4.3.0-intel-2018b
-module load Boost/1.67.0-intel-2018b
-module load FFTW/3.3.8-intel-2018b
-module load CMake/3.12.1-GCCcore-7.3.0
+#modules loaded on cartesius:
+#module purge
+#module load 2019
+#module load intel/2019a
+#module load netCDF/4.6.1-intel-2018b
+#module load netCDF-Fortran/4.4.4-intel-2018b
+#module load netCDF-C++4/4.3.0-intel-2018b
+#module load Boost/1.67.0-intel-2018b
+#module load FFTW/3.3.8-intel-2018b
+#module load CMake/3.12.1-GCCcore-7.3.0
 
+#build for a network with 3 hidden layers of 32, 64, and 128 nodes, respectively, that has only temperature, pressure and water vapour as input. To include ozone, set extra_gases_in to 1.
 
+mkdir build
 cd build
-cmake .. -DSYST=cartesius 
-make 
+cmake .. -DSYST=cartesius -DEXTRA_GASES_IN=0 -DNUMBER_LAYERS=2 -DNODES_LAYER_1=32 -DNODES_LAYER_2=64 -DNODES_LAYER_3=128
+make -j
 cd ..
 
-
-#old module list
-#module purge
-#module load pre2019
-#module load impi/2017.3.196-iccifort-2017.4.196-GCC-6.4.0-2.28
-#module load netCDF-C++4/4.3.0-foss-2017b
-#module load netCDF-Fortran/4.4.4-foss-2017b
-#module load cmake
-#module load Boost/1.65.1-foss-2017b
-#module load imkl/2017.3.196-iimpi-2017b
-#export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/mveerman/TensorRT-5.0.2.6/lib
 

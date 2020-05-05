@@ -52,6 +52,9 @@ add_definitions(-DGITHASH="${GITHASH}")
 #  target_link_libraries(test_rcemip rrtmgp ${LIBS} m)
 #  
 #  #supply 2D data (height, columns)
+#  add_executable(test_rfmip2D_clouds test_rfmip2D_clouds.cpp)
+#  target_link_libraries(test_rfmip2D_clouds rrtmgp ${LIBS} m)
+
   add_executable(test_rfmip2D test_rfmip2D.cpp)
   target_link_libraries(test_rfmip2D rrtmgp ${LIBS} m)
 
@@ -66,7 +69,7 @@ add_definitions(-DGITHASH="${GITHASH}")
 #  add_executable(rico test_rico2D.cpp)
 #  target_link_libraries(rico rrtmgp ${LIBS} m)
 
-#  add_executable(sampling sampling.cpp)
-#  target_link_libraries(sampling rrtmgp ${LIBS} m)
+  add_executable(sampling sampling.cpp)
+  target_link_libraries(sampling rrtmgp ${LIBS} m)
 
 #endif()

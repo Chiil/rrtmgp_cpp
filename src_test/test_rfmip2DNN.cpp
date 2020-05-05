@@ -90,8 +90,8 @@ namespace
         return var;
     }
 
-    template<typename TF,int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
-    Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3> load_and_init_gas_opticsNNSW(
+    template<typename TF,int Nlayer,int N_gas,int N_lay1,int N_lay2,int N_lay3>
+    Gas_opticsNN<TF,Nlayer,N_gas,N_lay1,N_lay2,N_lay3> load_and_init_gas_opticsNNSW(
             Master& master,
             const Gas_concs<TF>& gas_concs,
             const std::string& coef_file,
@@ -109,7 +109,7 @@ namespace
         Array<int,2> band2gpt(coef_nc.get_variable<int>("bnd_limits_gpt", {n_bnds, 2}), {2, n_bnds});
         Array<TF,1> solar_src(
                 coef_nc.get_variable<TF>("solar_source", {n_gpts}), {n_gpts});
-        return Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3>(
+        return Gas_opticsNN<TF,Nlayer,N_gas,N_lay1,N_lay2,N_lay3>(
                 gas_names,
                 band2gpt,
                 band_lims,
@@ -117,8 +117,8 @@ namespace
                 do_taussa);
     }
 
-    template<typename TF,int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
-    Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3> load_and_init_gas_opticsNNLW(
+    template<typename TF,int Nlayer,int N_gas,int N_lay1,int N_lay2,int N_lay3>
+    Gas_opticsNN<TF,Nlayer,N_gas,N_lay1,N_lay2,N_lay3> load_and_init_gas_opticsNNLW(
             Master& master,
             const Gas_concs<TF>& gas_concs,
             const std::string& coef_file)
@@ -133,7 +133,7 @@ namespace
                 get_variable_string("gas_names", {n_absorbers}, coef_nc, n_char, true), {n_absorbers});
         Array<TF,2> band_lims(coef_nc.get_variable<TF>("bnd_limits_wavenumber", {n_bnds, 2}), {2, n_bnds});
         Array<int,2> band2gpt(coef_nc.get_variable<int>("bnd_limits_gpt", {n_bnds, 2}), {2, n_bnds});
-        return Gas_opticsNN<TF,Nlayer,N_layI,N_lay1,N_lay2,N_lay3>(
+        return Gas_opticsNN<TF,Nlayer,N_gas,N_lay1,N_lay2,N_lay3>(
                 gas_names,
                 band2gpt,
                 band_lims);
@@ -173,10 +173,20 @@ void get_tropo_idx(Netcdf_file& file_nc, int& idx_tropo, int& idxlower, int& idx
     idxupper = (n_lay - idx_tropo) * n_col;
 }
 
-
+bool atm_exists(int idx)
+{
+    if (idx==0) {return false;}
+    else {return true;}
+}
 template<typename TF>
 void solve_radiation(Master& master)
 {
+    constexpr int NlayOlw  = 256;
+    constexpr int NlayOlwp = 768;
+    constexpr int NlayOsw  = 224;
+    constexpr int NlayI    = Ngas + 3;
+    constexpr int NlayIp   = Ngas + 5;
+
     //input output files
     Netcdf_file file_nc(master, "test_rcemip_input2D.nc", Netcdf_mode::Read);
     Netcdf_file output_file(master, "Flux+OptProp.nc", Netcdf_mode::Create);
@@ -191,7 +201,9 @@ void solve_radiation(Master& master)
     int idxlower;
     int idxupper;
     get_tropo_idx<TF>(file_nc, idx_tropo, idxlower, idxupper);
-
+    const bool lower_atm = atm_exists(idxlower);
+    const bool upper_atm = atm_exists(idxupper);
+    
     std::cout<<"Using "<<Nlayer<<" hidden layers"<<std::endl;
     if constexpr (Nlayer==1) std::cout<<"Nodes: "<<Nlay1<<std::endl;
     if constexpr (Nlayer==2) std::cout<<"Nodes: "<<Nlay1<<", "<<Nlay2<<std::endl;
@@ -201,23 +213,23 @@ void solve_radiation(Master& master)
     Netcdf_file NcFile(master, "weights.nc", Netcdf_mode::Read);    
 
     Netcdf_group tlwnc = NcFile.get_group("TLW");
-    Network<Nlayer,NlayI,Nlay1,Nlay2,Nlay3>TLW(idxlower,idxupper,
-                                                      tlwnc,NlayOlw);
+    Network<Nlayer,Nlay1,Nlay2,Nlay3>TLW(idxlower,idxupper,
+                                                      tlwnc,NlayOlw,NlayI);
     Netcdf_group plknc = NcFile.get_group("Planck");
-    Network<Nlayer,NlayI,Nlay1,Nlay2,Nlay3>PLK(idxlower,idxupper,
-                                                      plknc,NlayOlw+2);
+    Network<Nlayer,Nlay1,Nlay2,Nlay3>PLK(idxlower,idxupper,
+                                                      plknc,NlayOlwp,NlayIp);
     Netcdf_group tswnc = NcFile.get_group("TSW");
-    Network<Nlayer,NlayI,Nlay1,Nlay2,Nlay3>TSW(idxlower,idxupper,
-                                                      tswnc,NlayOsw);
+    Network<Nlayer,Nlay1,Nlay2,Nlay3>TSW(idxlower,idxupper,
+                                                      tswnc,NlayOsw,NlayI);
     Netcdf_group ssanc = NcFile.get_group("SSA");
-    Network<Nlayer,NlayI,Nlay1,Nlay2,Nlay3>SSA(idxlower,idxupper,
-                                                      ssanc,NlayOsw);
+    Network<Nlayer,Nlay1,Nlay2,Nlay3>SSA(idxlower,idxupper,
+                                                      ssanc,NlayOsw,NlayI);
 
     // These are the global variables that need to be contained in a class.
     Gas_concs<TF> gas_concs;
 
-    std::unique_ptr<Gas_opticsNN<TF,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>> kdist_lw;
-    std::unique_ptr<Gas_opticsNN<TF,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>> kdist_sw;
+    std::unique_ptr<Gas_opticsNN<TF,Nlayer,Ngas,Nlay1,Nlay2,Nlay3>> kdist_lw;
+    std::unique_ptr<Gas_opticsNN<TF,Nlayer,Ngas,Nlay1,Nlay2,Nlay3>> kdist_sw;
     // Input and output files:
 
     for (int iset = 0; iset < n_set; ++iset)
@@ -229,13 +241,12 @@ void solve_radiation(Master& master)
 
 
         load_gas_concs<TF>(gas_concs, input_nc);
-        kdist_lw = std::make_unique<Gas_opticsNN<TF,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>>(
-                    load_and_init_gas_opticsNNLW<TF,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>(master, gas_concs, "coefficients_lw.nc"));
-        kdist_sw = std::make_unique<Gas_opticsNN<TF,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>>(
-                    load_and_init_gas_opticsNNSW<TF,Nlayer,NlayI,Nlay1,Nlay2,Nlay3>(master, gas_concs, "coefficients_sw.nc",true)); 
+        kdist_lw = std::make_unique<Gas_opticsNN<TF,Nlayer,Ngas,Nlay1,Nlay2,Nlay3>>(
+                    load_and_init_gas_opticsNNLW<TF,Nlayer,Ngas,Nlay1,Nlay2,Nlay3>(master, gas_concs, "coefficients_lw.nc"));
+        kdist_sw = std::make_unique<Gas_opticsNN<TF,Nlayer,Ngas,Nlay1,Nlay2,Nlay3>>(
+                    load_and_init_gas_opticsNNSW<TF,Nlayer,Ngas,Nlay1,Nlay2,Nlay3>(master, gas_concs, "coefficients_sw.nc",true)); 
 
         // Solve the full column once.
-
         Array<TF,2> p_lay(input_nc.get_variable<TF>("p_lay", {n_lay, n_col}), {n_col, n_lay});
         Array<TF,2> t_lay(input_nc.get_variable<TF>("t_lay", {n_lay, n_col}), {n_col, n_lay});
         Array<TF,2> p_lev(input_nc.get_variable<TF>("p_lev", {n_lev, n_col}), {n_col, n_lev});
@@ -292,7 +303,9 @@ void solve_radiation(Master& master)
                 optical_props_lw,
                 sources,
                 t_lev,
-                idx_tropo);
+                idx_tropo,
+                lower_atm,
+                upper_atm);
         endtime = get_wall_time();
         std::cout<<"LONGWAVE: "<<endtime-starttime<<std::endl;
 
@@ -348,14 +361,16 @@ void solve_radiation(Master& master)
                 gas_concs,
                 optical_props_sw,
                 toa_src,
-                idx_tropo);
+                idx_tropo,
+                lower_atm,
+                upper_atm);
         endtime = get_wall_time();
         std::cout<<"SHORTWAVE: "<<endtime-starttime<<std::endl;
 
-        const TF tsi_scaling = 0.4053176301654965;
-        for (int igpt=1; igpt<=n_gpt_sw; ++igpt)
-            for (int icol=1; icol<=n_col; ++icol)
-                toa_src({icol, igpt}) *= tsi_scaling;
+        //const TF tsi_scaling = 0.4053176301654965;
+        //for (int igpt=1; igpt<=n_gpt_sw; ++igpt)
+        //    for (int icol=1; icol<=n_col; ++icol)
+        //        toa_src({icol, igpt}) *= tsi_scaling;
             
         Array<TF,3> sw_gpt_flux_up    ({n_col, n_lev, n_gpt_sw});
         Array<TF,3> sw_gpt_flux_dn    ({n_col, n_lev, n_gpt_sw});

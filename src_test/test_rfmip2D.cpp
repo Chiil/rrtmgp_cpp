@@ -361,7 +361,6 @@ void solve_radiation(Master& master)
         const int n_lay = input_nc.get_dimension_size("lay");
         const int n_lev = input_nc.get_dimension_size("lev");
         const int n_col = input_nc.get_dimension_size("col");
-
         load_gas_concs<TF>(gas_concs, input_nc);
 
         // Solve the full column once.
@@ -485,10 +484,10 @@ void solve_radiation(Master& master)
         endtime = get_wall_time();
         std::cout<<"SHORTWAVE: "<<endtime-starttime<<std::endl;
 
-        const TF tsi_scaling = 0.4053176301654965;
-        for (int igpt=1; igpt<=n_gpt_sw; ++igpt)
-            for (int icol=1; icol<=n_col; ++icol)
-                toa_src({icol, igpt}) *= tsi_scaling;
+        //#const TF tsi_scaling = 0.4053176301654965;
+        //#for (int igpt=1; igpt<=n_gpt_sw; ++igpt)
+        //#    for (int icol=1; icol<=n_col; ++icol)
+        //#        toa_src({icol, igpt}) *= tsi_scaling;
 
 
         Array<TF,3> sw_gpt_flux_up    ({n_col, n_lev, n_gpt_sw});
@@ -513,6 +512,7 @@ void solve_radiation(Master& master)
 
         Array<TF,2> sw_flux_up ({n_col, n_lev});
         Array<TF,2> sw_flux_dn ({n_col, n_lev});
+        Array<TF,2> sw_flux_dir({n_col, n_lev});
         Array<TF,2> sw_flux_net({n_col, n_lev});
         Array<TF,2> sw_heating ({n_col, n_lay});
 
@@ -522,6 +522,7 @@ void solve_radiation(Master& master)
             {   
                 sw_flux_up ({icol, ilev}) = fluxes->get_flux_up ()({icol, ilev});
                 sw_flux_dn ({icol, ilev}) = fluxes->get_flux_dn ()({icol, ilev});
+                sw_flux_dir({icol, ilev}) = fluxes->get_flux_dn_dir()({icol, ilev});
                 sw_flux_net({icol, ilev}) = fluxes->get_flux_net()({icol, ilev});
             }
 
@@ -572,11 +573,13 @@ void solve_radiation(Master& master)
 
         auto nc_sw_flux_up  = output_nc.add_variable<TF>("sw_flux_up" , {"lev", "col"});
         auto nc_sw_flux_dn  = output_nc.add_variable<TF>("sw_flux_dn" , {"lev", "col"});
+        auto nc_sw_flux_dir = output_nc.add_variable<TF>("sw_flux_dir", {"lev", "col"});
         auto nc_sw_flux_net = output_nc.add_variable<TF>("sw_flux_net", {"lev", "col"});
         auto nc_sw_heating  = output_nc.add_variable<TF>("sw_heating" , {"lay", "col"});
 
         nc_sw_flux_up .insert(sw_flux_up .v(), {0, 0});
         nc_sw_flux_dn .insert(sw_flux_dn .v(), {0, 0});
+        nc_sw_flux_dir.insert(sw_flux_dir.v(), {0, 0});
         nc_sw_flux_net.insert(sw_flux_net.v(), {0, 0});
         nc_sw_heating .insert(sw_heating .v(), {0, 0});
 

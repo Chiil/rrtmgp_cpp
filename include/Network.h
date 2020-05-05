@@ -9,19 +9,16 @@
 #include <iostream>
 
 constexpr int layer_count  = 0;  //number of layers used
-constexpr int input_nodes  = 4;  //number of inputs
+constexpr int input_gases  = 0;  //number of extra gases
 constexpr int layer1_nodes = 64; //nodes in first layer (if used)
 constexpr int layer2_nodes = 64; //nodes in second layer (if used)
 constexpr int layer3_nodes = 0;  //nodes in third layer (if used)
 
-constexpr int NlayOlw=256;
-constexpr int NlayOlwp=768;
-constexpr int NlayOsw=224;
 
-#ifdef NODES_LAYER_IN
-    constexpr int NlayI  = NODES_LAYER_IN;
+#ifdef EXTRA_GASES_IN
+    constexpr int Ngas   = EXTRA_GASES_IN;
 #else
-    constexpr int NlayI  = input_nodes;
+    constexpr int Ngas   = input_gases;
 #endif
 
 #ifdef NODES_LAYER_1
@@ -43,13 +40,13 @@ constexpr int NlayOsw=224;
 #endif
 
 #ifdef NUMBER_LAYERS
-    constexpr int Nlayer  = NUMBER_LAYERS;
+    constexpr int Nlayer = NUMBER_LAYERS;
 #else
-    constexpr int Nlayer  = layer_count;
+    constexpr int Nlayer = layer_count;
 #endif
 
 
-template <int Nlayer,int N_layI,int N_lay1,int N_lay2,int N_lay3>
+template <int Nlayer,int N_lay1,int N_lay2,int N_lay3>
 class Network
 {
     public:
@@ -63,12 +60,14 @@ class Network
         Network(const int Nbatch_lower,
                 const int Nbatch_upper,
                 Netcdf_group& grp,
-                const int N_layO);
+                const int N_layO,
+                const int N_layI);
 
     private:
         int Nbatch_lower;
         int Nbatch_upper;
         int N_layO;
+        int N_layI;
         std::vector<float> output_wgth_lower;
         std::vector<float> output_wgth_upper;
         std::vector<float> output_bias_lower;
