@@ -516,7 +516,7 @@ void solve_radiation(Master& master)
             kdist_lw->get_col_dry(col_dry, gas_concs.get_vmr("h2o"), p_lev);
             kdist_sw->get_col_dry(col_dry, gas_concs.get_vmr("h2o"), p_lev);
         }
-        const int n_gpt_lw = optical_props_lw->get_ngpt();
+        const int n_gpt_lw = kdist_lw->get_ngpt();
         const int n_gpt_sw = kdist_sw->get_ngpt();
 
         for (int icvr=0; icvr<n_cvr; ++icvr)
@@ -577,6 +577,11 @@ void solve_radiation(Master& master)
                 } 
             } 
 
+            std::unique_ptr<Fluxes_broadband<TF>> fluxes =
+                std::make_unique<Fluxes_broadband<TF>>(n_col, n_lev);
+    
+            Array<TF,2> lw_flux_up ({n_col, n_lev});
+            Array<TF,2> lw_flux_dn ({n_col, n_lev});
             if (do_longwave)
             {
                 std::unique_ptr<Optical_props_arry<TF>> optical_props_lw =
@@ -609,8 +614,6 @@ void solve_radiation(Master& master)
     
                 }
                 
-                std::unique_ptr<Fluxes_broadband<TF>> fluxes =
-                        std::make_unique<Fluxes_broadband<TF>>(n_col, n_lev);
                 Array<TF,3> lw_gpt_flux_up({n_col, n_lev, n_gpt_lw});
                 Array<TF,3> lw_gpt_flux_dn({n_col, n_lev, n_gpt_lw});
 
@@ -627,9 +630,6 @@ void solve_radiation(Master& master)
                 fluxes->reduce(
                         lw_gpt_flux_up, lw_gpt_flux_dn,
                         optical_props_lw, top_at_1);
-    
-                Array<TF,2> lw_flux_up ({n_col, n_lev});
-                Array<TF,2> lw_flux_dn ({n_col, n_lev});
 
                 // Copy the data to the output.
                 for (int ilev=1; ilev<=n_lev; ++ilev)
@@ -708,8 +708,11 @@ void solve_radiation(Master& master)
                     sw_totflux_up({icol,ilev})  += sw_flux_up({icol,ilev})  * (1. / float(n_cvr));
                     sw_totflux_dn({icol,ilev})  += sw_flux_dn({icol,ilev})  * (1. / float(n_cvr));
                     sw_totflux_dir({icol,ilev}) += sw_flux_dir({icol,ilev}) * (1. / float(n_cvr));
-                    lw_totflux_dn({icol,ilev})  += lw_flux_dn({icol,ilev})  * (1. / float(n_cvr));
-                    lw_totflux_up({icol,ilev})  += lw_flux_up({icol,ilev})  * (1. / float(n_cvr));
+                    if (do_longwave)
+                    {
+                        lw_totflux_dn({icol,ilev})  += lw_flux_dn({icol,ilev})  * (1. / float(n_cvr));
+                        lw_totflux_up({icol,ilev})  += lw_flux_up({icol,ilev})  * (1. / float(n_cvr));
+                    }
                 }
         }
         // Compute the heating rates.
