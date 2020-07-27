@@ -393,6 +393,7 @@ void load_gas_concs(Gas_concs<TF>& gas_concs, Netcdf_group& rad_nc)
 template<typename TF>
 void solve_radiation(Master& master)
 {
+    const bool do_longwave = false;
     // These are the global variables that need to be contained in a class.
     Gas_concs<TF> gas_concs;
 
@@ -432,6 +433,7 @@ void solve_radiation(Master& master)
         const int abnd = 14;
         load_gas_concs<TF>(gas_concs, input_nc);
 
+        
         // Solve the full column once.
         Array<TF,3> aod(input_nc.get_variable<TF>("aod", {abnd,n_lay, n_col}), {n_col, n_lay,abnd});
         Array<TF,3> ssa(input_nc.get_variable<TF>("ssa", {abnd,n_lay, n_col}), {n_col, n_lay,abnd});
@@ -449,12 +451,11 @@ void solve_radiation(Master& master)
         Array<TF,2> c_rel(input_nc.get_variable<TF>("rel", {n_lay, n_col}), {n_col, n_lay});
         Array<TF,2> c_rei(input_nc.get_variable<TF>("rei", {n_lay, n_col}), {n_col, n_lay});
         Array<TF,2> c_cc (input_nc.get_variable<TF>("cc", {n_lay, n_col}), {n_col, n_lay});
-        Array<TF,2> lw_totflux_dn ({n_col, n_lev});
-        Array<TF,2> sw_totflux_dn ({n_col, n_lev});
-        Array<TF,2> sw_totflux_dr ({n_col, n_lev});
-        Array<TF,3> lw_bndflux_dn ({n_col, n_lev, abnd});
-        Array<TF,3> sw_bndflux_dn ({n_col, n_lev, abnd});
-        Array<TF,3> sw_bndflux_dr ({n_col, n_lev, abnd});
+        Array<TF,2> lw_totflux_up  ({n_col, n_lev});
+        Array<TF,2> lw_totflux_dn  ({n_col, n_lev});
+        Array<TF,2> sw_totflux_up  ({n_col, n_lev});
+        Array<TF,2> sw_totflux_dn  ({n_col, n_lev});
+        Array<TF,2> sw_totflux_dir ({n_col, n_lev});
        
         for (int ilay=1; ilay<=n_lay; ++ilay)
             for (int icol=1; icol<=n_col; ++icol)
@@ -463,6 +464,7 @@ void solve_radiation(Master& master)
                     n_cvr = 100;
                     break;
                 }
+
         Array<TF,2> overlap_param({n_col,n_lay});
         for (int ilay=1; ilay<=n_lay; ++ilay)
             for (int icol=1; icol<=n_col; ++icol)
@@ -472,11 +474,15 @@ void solve_radiation(Master& master)
                 overlap_param({icol,ilay}) = std::exp(-dz/TF(2000.));
                 
             }
+        
         for (int ilev=1; ilev<=n_lev; ++ilev)
             for (int icol=1; icol<=n_col; ++icol)
             {
-                lw_totflux_dn({icol, ilev}) = 0.;  
-                sw_totflux_dn({icol, ilev}) = 0.;  
+                lw_totflux_up({icol, ilev})  = 0.;  
+                lw_totflux_dn({icol, ilev})  = 0.;  
+                sw_totflux_up({icol, ilev})  = 0.;  
+                sw_totflux_dn({icol, ilev})  = 0.;  
+                sw_totflux_dir({icol, ilev}) = 0.;  
             }
 
         Array<int,2> m_lwp({n_col, n_lay});
@@ -491,6 +497,7 @@ void solve_radiation(Master& master)
                 emis_sfc({ibnd, icol}) = 1.;
 
         const int n_ang = 1;
+        const int top_at_1 = p_lay({1, 1}) < p_lay({1, n_lay});
         // LOAD THE SHORTWAVE SPECIFIC BOUNDARY CONDITIONS.
         Array<TF,2> sfc_alb_dir({n_bnd, n_col});
         Array<TF,2> sfc_alb_dif({n_bnd, n_col});
@@ -509,15 +516,9 @@ void solve_radiation(Master& master)
             kdist_lw->get_col_dry(col_dry, gas_concs.get_vmr("h2o"), p_lev);
             kdist_sw->get_col_dry(col_dry, gas_concs.get_vmr("h2o"), p_lev);
         }
-        // Solve the longwave first.
-        std::unique_ptr<Optical_props_arry<TF>> optical_props_lw =
-                std::make_unique<Optical_props_1scl<TF>>(n_col, n_lay, *kdist_lw);
         const int n_gpt_lw = optical_props_lw->get_ngpt();
-
-        std::unique_ptr<Optical_props_1scl<TF>> cloud_optical_props_lw =
-                std::make_unique<Optical_props_1scl<TF>>(n_col, n_lay, *cloud_lw);
         const int n_gpt_sw = kdist_sw->get_ngpt();
-        Source_func_lw<TF> sources(n_col, n_lay, *kdist_lw);
+
         for (int icvr=0; icvr<n_cvr; ++icvr)
         {
             //exponential random oberlap
@@ -576,78 +577,76 @@ void solve_radiation(Master& master)
                 } 
             } 
 
+            if (do_longwave)
+            {
+                std::unique_ptr<Optical_props_arry<TF>> optical_props_lw =
+                        std::make_unique<Optical_props_1scl<TF>>(n_col, n_lay, *kdist_lw);
+                std::unique_ptr<Optical_props_1scl<TF>> cloud_optical_props_lw =
+                        std::make_unique<Optical_props_1scl<TF>>(n_col, n_lay, *cloud_lw);
+                Source_func_lw<TF> sources(n_col, n_lay, *kdist_lw);
+        
+                kdist_lw->gas_optics(
+                        p_lay,
+                        p_lev,
+                        t_lay,
+                        t_sfc,
+                        gas_concs,
+                        optical_props_lw,
+                        sources,
+                        col_dry,
+                        t_lev);
+
+                if (n_cvr > 1)
+                {
+                    cloud_lw->cloud_optics(
+                            m_lwp, m_iwp,
+                            c_lwp, c_iwp,
+                            c_rel, c_rei,
+                            *cloud_optical_props_lw);
+                    
+                    add_to(dynamic_cast<Optical_props_1scl<TF>&>(*optical_props_lw),
+                           dynamic_cast<Optical_props_1scl<TF>&>(*cloud_optical_props_lw));
+    
+                }
+                
+                std::unique_ptr<Fluxes_broadband<TF>> fluxes =
+                        std::make_unique<Fluxes_broadband<TF>>(n_col, n_lev);
+                Array<TF,3> lw_gpt_flux_up({n_col, n_lev, n_gpt_lw});
+                Array<TF,3> lw_gpt_flux_dn({n_col, n_lev, n_gpt_lw});
+
+                Rte_lw<TF>::rte_lw(
+                        optical_props_lw,
+                        top_at_1,
+                        sources,
+                        emis_sfc,
+                        Array<TF,2>(), // Add an empty array, no inc_flux.
+                        lw_gpt_flux_up,
+                        lw_gpt_flux_dn,
+                        n_ang);
+                
+                fluxes->reduce(
+                        lw_gpt_flux_up, lw_gpt_flux_dn,
+                        optical_props_lw, top_at_1);
+    
+                Array<TF,2> lw_flux_up ({n_col, n_lev});
+                Array<TF,2> lw_flux_dn ({n_col, n_lev});
+
+                // Copy the data to the output.
+                for (int ilev=1; ilev<=n_lev; ++ilev)
+                    for (int icol=1; icol<=n_col; ++icol)
+                    {   
+                        lw_flux_up ({icol, ilev}) = fluxes->get_flux_up ()({icol, ilev});
+                        lw_flux_dn ({icol, ilev}) = fluxes->get_flux_dn ()({icol, ilev});
+                    }
+            }
 
 
-//            starttime = get_wall_time();
-//            kdist_lw->gas_optics(
-//                    p_lay,
-//                    p_lev,
-//                    t_lay,
-//                    t_sfc,
-//                    gas_concs,
-//                    optical_props_lw,
-//                    sources,
-//                    col_dry,
-//                    t_lev);
-//            endtime = get_wall_time();
-//            std::cout<<"LONGWAVE: "<<std::endl;
-//            cloud_lw->cloud_optics(
-//                    m_lwp, m_iwp,
-//                    c_lwp, c_iwp,
-//                    c_rel, c_rei,
-//                    *cloud_optical_props_lw);
-//            
-//            
-//            std::cout<<"LONGWAVE: "<<endtime-starttime<<std::endl;
-//            add_to(dynamic_cast<Optical_props_1scl<TF>&>(*optical_props_lw),
-//                   dynamic_cast<Optical_props_1scl<TF>&>(*cloud_optical_props_lw));
-//
-            std::unique_ptr<Fluxes_broadband<TF>> fluxes =
-                    std::make_unique<Fluxes_broadband<TF>>(n_col, n_lev);
-//
-            const int top_at_1 = p_lay({1, 1}) < p_lay({1, n_lay});
-//
-//            Array<TF,3> lw_gpt_flux_up({n_col, n_lev, n_gpt_lw});
-//            Array<TF,3> lw_gpt_flux_dn({n_col, n_lev, n_gpt_lw});
-//
-//            Rte_lw<TF>::rte_lw(
-//                    optical_props_lw,
-//                    top_at_1,
-//                    sources,
-//                    emis_sfc,
-//                    Array<TF,2>(), // Add an empty array, no inc_flux.
-//                    lw_gpt_flux_up,
-//                    lw_gpt_flux_dn,
-//                    n_ang);
-//            
-//            fluxes->reduce(
-//                    lw_gpt_flux_up, lw_gpt_flux_dn,
-//                    optical_props_lw, top_at_1);
-//
-//            Array<TF,2> lw_flux_up ({n_col, n_lev});
-//            Array<TF,2> lw_flux_dn ({n_col, n_lev});
-//            Array<TF,2> lw_flux_net({n_col, n_lev});
-//            Array<TF,2> lw_heating ({n_col, n_lay});
-//
-//            // Copy the data to the output.
-//            for (int ilev=1; ilev<=n_lev; ++ilev)
-//                for (int icol=1; icol<=n_col; ++icol)
-//                {   
-//                    lw_flux_up ({icol, ilev}) = fluxes->get_flux_up ()({icol, ilev});
-//                    lw_flux_dn ({icol, ilev}) = fluxes->get_flux_dn ()({icol, ilev});
-//                    lw_flux_net({icol, ilev}) = fluxes->get_flux_net()({icol, ilev});
-//                }
-            
             Array<TF,2> toa_src({n_col, n_gpt_sw});
-
             std::unique_ptr<Optical_props_arry<TF>> optical_props_sw =
                     std::make_unique<Optical_props_2str<TF>>(n_col, n_lay, *kdist_sw);
             std::unique_ptr<Optical_props_2str<TF>> cloud_optical_props_sw =
                     std::make_unique<Optical_props_2str<TF>>(n_col, n_lay, *cloud_sw);
-            std::unique_ptr<Optical_props_2str<TF>> aerosol_optical_props_sw =
-                    std::make_unique<Optical_props_2str<TF>>(n_col, n_lay, *cloud_sw);
             
-            starttime = get_wall_time();
             kdist_sw->gas_optics(
                     p_lay,
                     p_lev,
@@ -656,7 +655,6 @@ void solve_radiation(Master& master)
                     optical_props_sw,
                     toa_src,
                     col_dry);
-            endtime = get_wall_time();
             
             if (n_cvr > 1)
             {
@@ -669,25 +667,6 @@ void solve_radiation(Master& master)
                 add_to(dynamic_cast<Optical_props_2str<TF>&>(*optical_props_sw),
                        dynamic_cast<Optical_props_2str<TF>&>(*cloud_optical_props_sw));
             }
-
-            //Array<TF,3>& aer_tau = aerosol_optical_props_sw->get_tau();
-            //Array<TF,3>& aer_ssa = aerosol_optical_props_sw->get_ssa();
-            //Array<TF,3>& aer_g   = aerosol_optical_props_sw->get_g();
-            //for (int ibnd=1; ibnd<=abnd; ++ibnd)
-            //    for (int ilev=1; ilev<=n_lay; ++ilev)
-            //        for (int icol=1; icol<=n_col; ++icol)
-            //        {
-            //            aer_tau({icol,ilev,ibnd}) = aod({icol,ilev,ibnd});
-            //            aer_ssa({icol,ilev,ibnd}) = ssa({icol,ilev,ibnd});
-            //            aer_g  ({icol,ilev,ibnd}) = asy({icol,ilev,ibnd});
-            //        }
-            //add_to(dynamic_cast<Optical_props_2str<TF>&>(*optical_props_sw),
-            //       dynamic_cast<Optical_props_2str<TF>&>(*aerosol_optical_props_sw));
-            //#const TF tsi_scaling = 0.4053176301654965;
-            //#for (int igpt=1; igpt<=n_gpt_sw; ++igpt)
-            //#    for (int icol=1; icol<=n_col; ++icol)
-            //#        toa_src({icol, igpt}) *= tsi_scaling;
-
 
             Array<TF,3> sw_gpt_flux_up    ({n_col, n_lev, n_gpt_sw});
             Array<TF,3> sw_gpt_flux_dn    ({n_col, n_lev, n_gpt_sw});
@@ -712,8 +691,6 @@ void solve_radiation(Master& master)
             Array<TF,2> sw_flux_up ({n_col, n_lev});
             Array<TF,2> sw_flux_dn ({n_col, n_lev});
             Array<TF,2> sw_flux_dir({n_col, n_lev});
-            Array<TF,2> sw_flux_net({n_col, n_lev});
-            Array<TF,2> sw_heating ({n_col, n_lay});
 
             // Copy the data to the output.
             for (int ilev=1; ilev<=n_lev; ++ilev)
@@ -722,58 +699,28 @@ void solve_radiation(Master& master)
                     sw_flux_up ({icol, ilev}) = fluxes->get_flux_up ()({icol, ilev});
                     sw_flux_dn ({icol, ilev}) = fluxes->get_flux_dn ()({icol, ilev});
                     sw_flux_dir({icol, ilev}) = fluxes->get_flux_dn_dir()({icol, ilev});
-                    sw_flux_net({icol, ilev}) = fluxes->get_flux_net()({icol, ilev});
                 }
+
             const int gptpband = 16;
             for (int ilev=1; ilev<=n_lev; ++ilev)
                 for (int icol=1; icol<=n_col; ++icol)
                 {
-                    sw_totflux_dn({icol,ilev}) += sw_flux_dn({icol,ilev})  * (1. / float(n_cvr));
-                    sw_totflux_dr({icol,ilev}) += sw_flux_dir({icol,ilev}) * (1. / float(n_cvr));
-//                    lw_totflux_dn({icol,ilev}) += lw_flux_dn({icol,ilev})  * (1. / float(n_cvr));
-                    //for (int ibnd=1; ibnd<=abnd; ++ibnd)
-                    //{
-                    //    for (int igpt=1; igpt<=gptpband; ++igpt)
-                    //    {
-                    //        const int gptidx = igpt + (ibnd-1) * gptpband;
-//                  //          lw_bndflux_dn({icol,ilev,ibnd}) += lw_gpt_flux_dn({icol,ilev,gptidx}) * (1. / float(n_cvr));
-                    //        sw_bndflux_dn({icol,ilev,ibnd}) += sw_gpt_flux_dn({icol,ilev,gptidx}) * (1. / float(n_cvr));
-                    //        sw_bndflux_dr({icol,ilev,ibnd}) += sw_gpt_flux_dn_dir({icol,ilev,gptidx}) * (1. / float(n_cvr));
-                    //    }
-                  
-                    //}
+                    sw_totflux_up({icol,ilev})  += sw_flux_up({icol,ilev})  * (1. / float(n_cvr));
+                    sw_totflux_dn({icol,ilev})  += sw_flux_dn({icol,ilev})  * (1. / float(n_cvr));
+                    sw_totflux_dir({icol,ilev}) += sw_flux_dir({icol,ilev}) * (1. / float(n_cvr));
+                    lw_totflux_dn({icol,ilev})  += lw_flux_dn({icol,ilev})  * (1. / float(n_cvr));
+                    lw_totflux_up({icol,ilev})  += lw_flux_up({icol,ilev})  * (1. / float(n_cvr));
                 }
         }
         // Compute the heating rates.
         constexpr TF g = 9.80655;
         constexpr TF cp = 1005.;
 
-        //Array<TF,2> heating ({n_col, n_lay});
-
-        //for (int ilay=1; ilay<=n_lay; ++ilay)
-        //    for (int icol=1; icol<=n_col; ++icol)
-        //    {
-        //        lw_heating({icol, ilay}) =
-        //                ( lw_flux_up({icol, ilay+1}) - lw_flux_up({icol, ilay})
-        //                - lw_flux_dn({icol, ilay+1}) + lw_flux_dn({icol, ilay}) )
-        //                * g / ( cp * (p_lev({icol, ilay+1}) - p_lev({icol, ilay})) ) * 86400.;
-
-        //        sw_heating({icol, ilay}) =
-        //                ( sw_flux_up({icol, ilay+1}) - sw_flux_up({icol, ilay})
-        //                - sw_flux_dn({icol, ilay+1}) + sw_flux_dn({icol, ilay}) )
-        //                * g / ( cp * (p_lev({icol, ilay+1}) - p_lev({icol, ilay})) ) * 86400.;
-
-        //        heating({icol, ilay}) = lw_heating({icol, ilay}) + sw_heating({icol, ilay});
-        //    }
-    
         // Store the radiation fluxes to a file
         Netcdf_group output_nc = output_file.add_group(sets[iset]);
         output_nc.add_dimension("col", n_col);
         output_nc.add_dimension("lev", n_lev);
         output_nc.add_dimension("lay", n_lay);
-        output_nc.add_dimension("gptlw", n_gpt_lw);
-        output_nc.add_dimension("gptsw", n_gpt_sw);
-        output_nc.add_dimension("bndsw", abnd);
 
         auto nc_p_lev = output_nc.add_variable<TF>("plev", {"lev","col"});
         auto nc_p_lay = output_nc.add_variable<TF>("play", {"lay","col"});
@@ -783,74 +730,20 @@ void solve_radiation(Master& master)
         auto nc_mu0 = output_nc.add_variable<TF>("mu0", {"col"});
         nc_mu0.insert(mu0.v(), {0});
 
-        //auto nc_lw_flux_up  = output_nc.add_variable<TF>("lw_flux_up" , {"lev", "col"});
-//        auto nc_lw_flux_dn  = output_nc.add_variable<TF>("lw_flux_dn" , {"lev", "col"});
-        //auto nc_lw_flux_net = output_nc.add_variable<TF>("lw_flux_net", {"lev", "col"});
-        //auto nc_lw_heating  = output_nc.add_variable<TF>("lw_heating" , {"lay", "col"});
+        if (do_longwave)
+        {
+            auto nc_lw_flux_up  = output_nc.add_variable<TF>("lw_flux_up" , {"lev", "col"});
+            auto nc_lw_flux_dn  = output_nc.add_variable<TF>("lw_flux_dn" , {"lev", "col"});
+            nc_lw_flux_up .insert(lw_totflux_up .v(), {0, 0});
+            nc_lw_flux_dn .insert(lw_totflux_dn .v(), {0, 0});
+        }
 
-        //nc_lw_flux_up .insert(lw_flux_up .v(), {0, 0});
-//        nc_lw_flux_dn .insert(lw_totflux_dn .v(), {0, 0});
-        //nc_lw_flux_net.insert(lw_flux_net.v(), {0, 0});
-        //nc_lw_heating .insert(lw_heating .v(), {0, 0});
-
-        //auto nc_sw_flux_up  = output_nc.add_variable<TF>("sw_flux_up" , {"lev", "col"});
+        auto nc_sw_flux_up  = output_nc.add_variable<TF>("sw_flux_up" , {"lev", "col"});
         auto nc_sw_flux_dn  = output_nc.add_variable<TF>("sw_flux_dn" , {"lev", "col"});
-        auto nc_sw_flux_dr  = output_nc.add_variable<TF>("sw_flux_dr" , {"lev", "col"});
-        //auto nc_sw_bndflux_dn  = output_nc.add_variable<TF>("sw_bandflux_dn" , {"bndsw","lev", "col"});
-        //auto nc_sw_bndflux_dr  = output_nc.add_variable<TF>("sw_bandflux_dr" , {"bndsw","lev", "col"});
-        //auto nc_sw_flux_dir = output_nc.add_variable<TF>("sw_flux_dir", {"lev", "col"});
-        //auto nc_sw_flux_net = output_nc.add_variable<TF>("sw_flux_net", {"lev", "col"});
-        //auto nc_sw_heating  = output_nc.add_variable<TF>("sw_heating" , {"lay", "col"});
-
-        //nc_sw_flux_up .insert(sw_flux_up .v(), {0, 0});
-        nc_sw_flux_dn .insert(sw_totflux_dn .v(), {0, 0});
-        nc_sw_flux_dr .insert(sw_totflux_dr .v(), {0, 0});
-        //nc_sw_bndflux_dn .insert(sw_bndflux_dn .v(), {0, 0, 0});
-        //nc_sw_bndflux_dr .insert(sw_bndflux_dr .v(), {0, 0, 0});
-        //nc_sw_flux_dir.insert(sw_flux_dir.v(), {0, 0});
-        //nc_sw_flux_net.insert(sw_flux_net.v(), {0, 0});
-        //nc_sw_heating .insert(sw_heating .v(), {0, 0});
-
-        //auto nc_heating = output_nc.add_variable<TF>("heating", {"lay", "col"});
-        //nc_heating.insert(heating.v(), {0, 0});
-
-        //auto nc_lw_gpt_flux_dn = output_nc.add_variable<TF>("lw_gpt_flux_dn" , {"gptlw","lev", "col"});
-        //nc_lw_gpt_flux_dn.insert(lw_gpt_flux_dn.v(),{0,0,0}); 
-        //auto nc_lw_gpt_flux_up = output_nc.add_variable<TF>("lw_gpt_flux_up" , {"gptlw","lev", "col"});
-        //nc_lw_gpt_flux_up.insert(lw_gpt_flux_up.v(),{0,0,0});
-
-        //auto nc_sw_gpt_flux_dn = output_nc.add_variable<TF>("sw_gpt_flux_dn" , {"gptsw","lev", "col"});
-        //nc_sw_gpt_flux_dn.insert(sw_gpt_flux_dn.v(),{0,0,0}); 
-        //auto nc_sw_gpt_flux_up = output_nc.add_variable<TF>("sw_gpt_flux_up" , {"gptsw","lev", "col"});
-        //nc_sw_gpt_flux_up.insert(sw_gpt_flux_up.v(),{0,0,0});
-
-        //Array<TF,3> lwtau = optical_props_lw->get_tau();
-        //auto nc_lw_gpt_tau = output_nc.add_variable<TF>("lw_gpt_tau" , {"gptlw","lay", "col"});
-        //nc_lw_gpt_tau.insert(lwtau.v(),{0,0,0}); 
-
-        //Array<TF,3> swtau = optical_props_sw->get_tau();
-        //auto nc_sw_gpt_tau = output_nc.add_variable<TF>("sw_gpt_tau" , {"gptsw","lay", "col"});
-        //nc_sw_gpt_tau.insert(swtau.v(),{0,0,0}); 
-        //
-        //Array<TF,3> swssa = optical_props_sw->get_ssa();
-        //auto nc_sw_gpt_ssa = output_nc.add_variable<TF>("sw_gpt_ssa" , {"gptsw","lay", "col"});
-        //nc_sw_gpt_ssa.insert(swssa.v(),{0,0,0}); 
-
-        //Array<TF,3> myplk_lay = sources.get_lay_source();
-        //auto nc_lw_gpt_plk = output_nc.add_variable<TF>("lw_gpt_plk" , {"gptlw","lay", "col"});
-        //nc_lw_gpt_plk.insert(myplk_lay.v(),{0,0,0}); 
-
-        //Array<TF,3> myplk_inc = sources.get_lev_source_inc();
-        //auto nc_lw_gpt_plk_inc = output_nc.add_variable<TF>("lw_gpt_plk_inc" , {"gptlw","lay", "col"});
-        //nc_lw_gpt_plk_inc.insert(myplk_inc.v(),{0,0,0}); 
-        //
-        //Array<TF,3> myplk_dec = sources.get_lev_source_dec();
-        //auto nc_lw_gpt_plk_dec = output_nc.add_variable<TF>("lw_gpt_plk_dec" , {"gptlw","lay", "col"});
-        //nc_lw_gpt_plk_dec.insert(myplk_dec.v(),{0,0,0}); 
-
-        //Array<TF,2> mysfc = sources.get_sfc_source();
-        //auto nc_lw_gpt_sfc = output_nc.add_variable<TF>("lw_gpt_sfc" , {"gptlw", "col"});
-        //nc_lw_gpt_sfc.insert(mysfc.v(),{0,0}); 
+        auto nc_sw_flux_dir = output_nc.add_variable<TF>("sw_flux_dir", {"lev", "col"});
+        nc_sw_flux_up  .insert(sw_totflux_up.v(), {0, 0});
+        nc_sw_flux_dn  .insert(sw_totflux_dn.v(), {0, 0});
+        nc_sw_flux_dir .insert(sw_totflux_dir.v(), {0, 0});
 
 
     }
